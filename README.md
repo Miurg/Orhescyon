@@ -32,7 +32,7 @@ include(FetchContent)
 
 FetchContent_Declare(
     Orhescyon
-    GIT_REPOSITORY https://github.com/yourusername/Orhescyon.git
+    GIT_REPOSITORY https://github.com/Miurg/Orhescyon.git
     GIT_TAG        main
 )
 
