@@ -9,3 +9,14 @@ target_include_directories(Orhescyon INTERFACE
 )
 
 target_compile_features(Orhescyon INTERFACE cxx_std_20)
+
+if(PROJECT_IS_TOP_LEVEL)
+    option(ORHESCYON_BUILD_TESTS "Build tests" ON)
+else()
+    option(ORHESCYON_BUILD_TESTS "Build tests" OFF)
+endif()
+
+if(ORHESCYON_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
