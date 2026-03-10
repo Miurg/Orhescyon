@@ -19,7 +19,6 @@ private:
 	EntityManager _entityManager;
 	SystemManager _systemManager;
 	ContextManager _contextManager;
-	ActiveEntitySet _activeEntities;
 
 public:
 	GeneralManager(const GeneralManager&) = delete;
@@ -37,7 +36,6 @@ public:
 	Entity createEntity()
 	{
 		Entity entity = _entityManager.createEntity();
-		_activeEntities.insert(entity);
 		return entity;
 	}
 
@@ -45,22 +43,16 @@ public:
 	// Order matters: systems may access components in onEntityUnsubscribed.
 	void destroyEntity(Entity entity)
 	{
-		if (!_activeEntities.contains(entity))
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::DestroyEntity on inactive entity " << entity << std::endl;
-			return;
-		}
-
+		_entityManager.destroyEntity(entity);
 		_componentManager.removeEntity(entity);
 		_systemManager.unsubscribeFromAll(entity, *this);
-		_activeEntities.erase(entity);
 	}
 
 	// Adds a component to the entity. Returns pointer to it or nullptr if inactive.
 	template <typename TComponent, typename... Args>
 	TComponent* addComponent(Entity entity, Args&&... args)
 	{
-		if (!_activeEntities.contains(entity))
+		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::AddComponent on inactive entity " << entity << std::endl;
 			return nullptr;
@@ -75,7 +67,7 @@ public:
 	template <typename TComponent>
 	void removeComponent(Entity entity)
 	{
-		if (!_activeEntities.contains(entity))
+		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::RemoveComponent on inactive entity " << entity << std::endl;
 			return;
@@ -89,7 +81,7 @@ public:
 	template <typename TComponent>
 	TComponent* getComponent(Entity entity)
 	{
-		if (!_activeEntities.contains(entity))
+		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::GetComponent on inactive entity " << entity << std::endl;
 			return nullptr;
@@ -109,7 +101,7 @@ public:
 	template <typename TSystem>
 	void subscribeEntity(Entity entity)
 	{
-		if (!_activeEntities.contains(entity))
+		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntity on inactive entity " << entity << std::endl;
 			return;
@@ -122,7 +114,7 @@ public:
 	template <typename TSystem>
 	void unsubscribeEntity(Entity entity)
 	{
-		if (!_activeEntities.contains(entity))
+		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntity on inactive entity " << entity << std::endl;
 			return;
@@ -139,12 +131,12 @@ public:
 
 	const ActiveEntitySet& getActiveEntities() const noexcept
 	{
-		return _activeEntities;
+		return _entityManager.getActiveEntities();
 	}
 
 	bool isActive(Entity entity) const noexcept
 	{
-		return _activeEntities.contains(entity);
+		return _entityManager.isActive(entity);
 	}
 
 	// Registers a context — a named entity for global resource access.
