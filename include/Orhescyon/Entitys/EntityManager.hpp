@@ -38,7 +38,7 @@ public:
 		return _activeEntities.contains(entity);
 	}
 
-	ActiveEntitySet getActiveEntities() const noexcept
+	const ActiveEntitySet& getActiveEntities() const noexcept
 	{
 		return _activeEntities;
 	}
