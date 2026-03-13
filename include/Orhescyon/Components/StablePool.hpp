@@ -4,6 +4,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+
 namespace Orhescyon
 {
 // Pointer-stable pool allocator. Blocks are never freed or moved, so pointers remain valid.
@@ -53,7 +54,7 @@ class StablePool
 
 	void ensureCapacity()
 	{
-		if (_capacity % BlockSize == 0)
+		if ((_capacity & BLOCK_MASK) == 0)
 		{
 			_blocks.push_back(std::make_unique<Block>());
 		}
