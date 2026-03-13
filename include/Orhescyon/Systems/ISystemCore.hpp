@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <typeindex>
+
 namespace Orhescyon
 {
 class GeneralManager;

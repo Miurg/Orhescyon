@@ -7,6 +7,7 @@
 
 #include "../Entitys/EntityManager.hpp"
 #include "ComponentArray.hpp"
+
 namespace Orhescyon
 {
 // Type-erased component storage. Each component type gets a ComponentArray.

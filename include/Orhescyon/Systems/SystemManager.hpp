@@ -9,7 +9,6 @@
 #include "ISystemCore.hpp"
 #include "../Entitys/ActiveEntitySet.hpp"
 
-
 namespace Orhescyon
 {
 class GeneralManager;

@@ -1,9 +1,11 @@
 #pragma once
 #include <vector>
+#include <iostream>
+
 #include "../Entitys/EntityManager.hpp"
 #include "ISystemCore.hpp"
 #include "../GeneralManager.hpp"
-#include <iostream>
+
 namespace Orhescyon
 {
 // CRTP base for systems. RequiredComponents are auto-checked in shouldProcessEntity().

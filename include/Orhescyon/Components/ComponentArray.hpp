@@ -2,6 +2,7 @@
 #include "StablePool.hpp"
 #include <limits>
 #include <vector>
+
 namespace Orhescyon
 {
 // Sparse array mapping Entity → slot in a StablePool.

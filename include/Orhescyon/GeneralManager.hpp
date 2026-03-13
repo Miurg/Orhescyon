@@ -9,6 +9,7 @@
 #include "Entitys/ActiveEntitySet.hpp"
 #include "Systems/SystemManager.hpp"
 #include "Contexts/ContextManager.hpp"
+
 namespace Orhescyon
 {
 // Central ECS manager — coordinates entities, components, systems and contexts.

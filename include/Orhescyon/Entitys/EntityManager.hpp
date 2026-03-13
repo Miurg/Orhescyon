@@ -3,6 +3,7 @@
 #include <atomic>
 #include "ActiveEntitySet.hpp"
 #include <iostream>
+
 using Entity = uint32_t;
 
 namespace Orhescyon
