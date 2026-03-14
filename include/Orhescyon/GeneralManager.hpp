@@ -53,11 +53,13 @@ public:
 	template <typename TComponent, typename... Args>
 	TComponent* addComponent(Entity entity, Args&&... args)
 	{
+#ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::AddComponent on inactive entity " << entity << std::endl;
 			return nullptr;
 		}
+#endif
 
 		TComponent* component = _componentManager.addComponent<TComponent>(entity, std::forward<Args>(args)...);
 
@@ -68,11 +70,13 @@ public:
 	template <typename TComponent>
 	void removeComponent(Entity entity)
 	{
+#ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::RemoveComponent on inactive entity " << entity << std::endl;
 			return;
 		}
+#endif
 
 		_componentManager.removeComponent<TComponent>(entity);
 		_systemManager.checkEntitySubscriptions(entity, *this);
@@ -82,12 +86,13 @@ public:
 	template <typename TComponent>
 	TComponent* getComponent(Entity entity)
 	{
+#ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::GetComponent on inactive entity " << entity << std::endl;
 			return nullptr;
 		}
-
+#endif
 		return _componentManager.getComponent<TComponent>(entity);
 	}
 
@@ -102,11 +107,13 @@ public:
 	template <typename TSystem>
 	void subscribeEntity(Entity entity)
 	{
+#ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntity on inactive entity " << entity << std::endl;
 			return;
 		}
+#endif
 
 		_systemManager.subscribe<TSystem>(entity, *this);
 	}
@@ -115,11 +122,13 @@ public:
 	template <typename TSystem>
 	void unsubscribeEntity(Entity entity)
 	{
+#ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntity on inactive entity " << entity << std::endl;
 			return;
 		}
+#endif
 
 		_systemManager.unsubscribe<TSystem>(entity, *this);
 	}

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/GeneralManager.hpp>
 #include <Orhescyon/Systems/SystemCore.hpp>
 

@@ -23,13 +23,14 @@ public:
 		{
 			_sparse.resize(entity * 2 + 1, INVALID_INDEX);
 		}
-
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (_sparse[entity] != INVALID_INDEX)
 		{
 			uint32_t index = _sparse[entity];
 			_pool[index] = std::move(component);
 			return _pool.at(index);
 		}
+#endif
 
 		auto [newIndex, ptr] = _pool.allocate(std::move(component));
 
@@ -39,30 +40,35 @@ public:
 
 	TComponent* getComponent(Entity entity)
 	{
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (entity >= _sparse.size()) [[unlikely]]
 		{
 			return nullptr;
 		}
+#endif
 		uint32_t index = _sparse[entity];
 
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (index == INVALID_INDEX) [[unlikely]]
 		{
 			return nullptr;
 		}
+#endif
 
 		return _pool.at(index);
 	}
 
 	void removeComponent(Entity entity)
 	{
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (entity >= _sparse.size()) [[unlikely]]
 			return;
-
+#endif
 		uint32_t indexToRemove = _sparse[entity];
-
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (indexToRemove == INVALID_INDEX) [[unlikely]]
 			return;
-
+#endif
 		_pool.deallocate(indexToRemove);
 
 		_sparse[entity] = INVALID_INDEX;

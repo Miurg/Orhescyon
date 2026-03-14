@@ -20,4 +20,3 @@ public:
 	virtual void onEntityUnsubscribed(Entity entity, GeneralManager& gm) = 0;
 };
 }
-	

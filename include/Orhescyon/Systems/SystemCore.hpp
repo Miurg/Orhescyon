@@ -23,8 +23,10 @@ protected:
 	{
 		if (gm.getComponent<T>(entity) == nullptr)
 		{
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 			std::cerr << "WARNING::SYSTEM::Entity " << entity << " should not be processed by " << systemName
 			          << " because it doesn't have required component: " << typeid(T).name() << std::endl;
+#endif
 			return false;
 		}
 		return true;

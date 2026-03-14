@@ -33,14 +33,16 @@ private:
 				break;
 			}
 		}
-
+#ifdef ORHESCYON_HIGH_CHECK
 		if (!system)
 		{
 			std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity << " trying to subscribe to a non-existent system "
 			          << systemType.name() << ". Cant subscribe!" << std::endl;
 			return;
 		}
+#endif
 
+#if  defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (!system->shouldProcessEntity(entity, gm))
 		{
 			std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity
@@ -48,9 +50,11 @@ private:
 			          << std::endl;
 			return;
 		}
+#endif
 
 		auto& currentSystems = EntityToSystems[entity];
 
+#ifdef ORHESCYON_HIGH_CHECK
 		if (std::find(currentSystems.begin(), currentSystems.end(), systemType) != currentSystems.end())
 		{
 			std::cout << "WARNING::SYSTEM_MANAGER::Entity " << entity
@@ -58,6 +62,7 @@ private:
 			          << ". Cant subscribe!" << std::endl;
 			return;
 		}
+#endif
 
 		system->onEntitySubscribed(entity, gm);
 
@@ -108,6 +113,7 @@ public:
 					break;
 				}
 			}
+#ifdef ORHESCYON_HIGH_CHECK
 			if (!system)
 			{
 				std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity
@@ -115,6 +121,7 @@ public:
 				          << ". Cant unsubscribe!" << std::endl;
 				return;
 			}
+#endif
 		}
 
 		system->onEntityUnsubscribed(entity, gm);

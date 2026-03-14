@@ -1,6 +1,7 @@
 #pragma once
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -12,15 +13,15 @@ namespace Orhescyon
 template <typename T, uint32_t BlockSize = 4096>
 class StablePool
 {
-	static_assert(BlockSize > 0 && (BlockSize & (BlockSize - 1)) == 0, "BlockSize must be a power of two");
+	static_assert(BlockSize > 0 && (BlockSize & BlockSize - 1) == 0, "BlockSize must be a power of two");
 
 	static constexpr uint32_t BLOCK_SHIFT = []() constexpr
 	{
 		uint32_t shift = 0;
-		uint32_t v = BlockSize;
-		while (v > 1)
+		uint32_t i = BlockSize;
+		while (i > 1)
 		{
-			v >>= 1;
+			i >>= 1;
 			++shift;
 		}
 		return shift;
@@ -98,22 +99,56 @@ public:
 	// Marks a slot as free for reuse. Does NOT call the destructor.
 	void deallocate(uint32_t index)
 	{
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
+		if (index >= _capacity) [[unlikely]]
+		{
+			return;
+		}
+#endif
 		_freeIndices.push_back(index);
 		--_liveCount;
 	}
 
 	T& operator[](uint32_t index) noexcept
 	{
+#if defined(ORHESCYON_HIGH_CHECK)
+		if (index >= _capacity || (index >> BLOCK_SHIFT) >= _blocks.size()) [[unlikely]]
+		{
+			std::cerr << "ERROR::STABLE_POOL::operator[] index " << index << " out of bounds (capacity: " << _capacity << ")" << std::endl;
+			if (_capacity > 0 && !_blocks.empty())
+			{
+				return _blocks[0]->at(0);
+			}
+			std::terminate();
+		}
+#endif
 		return _blocks[index >> BLOCK_SHIFT]->at(index & BLOCK_MASK);
 	}
 
 	const T& operator[](uint32_t index) const noexcept
 	{
+#if defined(ORHESCYON_HIGH_CHECK)
+		if (index >= _capacity || (index >> BLOCK_SHIFT) >= _blocks.size()) [[unlikely]]
+		{
+			std::cerr << "ERROR::STABLE_POOL::operator[] const index " << index << " out of bounds (capacity: " << _capacity << ")" << std::endl;
+			if (_capacity > 0 && !_blocks.empty())
+			{
+				return _blocks[0]->at(0);
+			}
+			std::terminate();
+		}
+#endif
 		return _blocks[index >> BLOCK_SHIFT]->at(index & BLOCK_MASK);
 	}
 
 	T* at(uint32_t index) noexcept
 	{
+#if defined(ORHESCYON_HIGH_CHECK)
+		if (index >= _capacity || (index >> BLOCK_SHIFT) >= _blocks.size()) [[unlikely]]
+		{
+			return nullptr;
+		}
+#endif
 		return _blocks[index >> BLOCK_SHIFT]->ptr(index & BLOCK_MASK);
 	}
 

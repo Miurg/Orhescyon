@@ -1,6 +1,6 @@
+#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/Components/ComponentManager.hpp>
 #include <gtest/gtest.h>
-
 
 using namespace Orhescyon;
 
