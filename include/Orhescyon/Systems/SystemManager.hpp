@@ -5,6 +5,9 @@
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
+#include <queue>
+#include <future>
+#include <set>
 
 #include "ISystemCore.hpp"
 #include "../Entitys/ActiveEntitySet.hpp"
@@ -42,7 +45,7 @@ private:
 		}
 #endif
 
-#if  defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (!system->shouldProcessEntity(entity, gm))
 		{
 			std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity
@@ -76,6 +79,9 @@ private:
 		}
 	}
 
+	bool _executionOrderDirty = true;
+	std::vector<std::vector<ISystemCore*>> _executionLayers;
+
 public:
 	void onShutdown(GeneralManager& gm)
 	{
@@ -92,6 +98,7 @@ public:
 		auto system = std::make_unique<TSystem>(std::forward<Args>(args)...);
 		SystemCore.push_back(std::move(system));
 		SystemCore.back()->onRegistered(gm);
+		_executionOrderDirty = true;
 	}
 
 	template <typename TSystem>
@@ -196,11 +203,147 @@ public:
 		}
 	}
 
+	void resolveExecutionSequence()
+	{
+		if (!_executionOrderDirty) return;
+		_executionLayers.clear();
+		if (SystemCore.empty()) return;
+
+		size_t systemsSize = SystemCore.size();
+		std::vector<std::vector<size_t>> neighbours(systemsSize);
+		std::vector<int> inDegree(systemsSize, 0);
+		std::set<std::pair<size_t, size_t>> addedEdges;
+
+		auto addEdge = [&](size_t from, size_t to)
+		{
+			if (addedEdges.insert({from, to}).second)
+			{
+				neighbours[from].push_back(to);
+				inDegree[to]++;
+			}
+		};
+
+		std::unordered_map<std::type_index, size_t> typeToIndex;
+		for (size_t i = 0; i < systemsSize; ++i) typeToIndex[std::type_index(typeid(*SystemCore[i]))] = i;
+
+		for (size_t first = 0; first < systemsSize; ++first)
+		{
+			const auto writesFirst = SystemCore[first]->getWriteComponents();
+			const auto readsFirst = SystemCore[first]->getReadComponents();
+
+			for (size_t second = first + 1; second < systemsSize; ++second)
+			{
+				const auto writesSecond = SystemCore[second]->getWriteComponents();
+				const auto readsSecond = SystemCore[second]->getReadComponents();
+
+				// first writes what second reads or writes - first must come before second
+				bool firstBeforeSecond = false;
+				for (auto& writeFirstInst : writesFirst)
+				{
+					for (auto& readsSecondInst : readsSecond)
+						if (writeFirstInst == readsSecondInst)
+						{
+							firstBeforeSecond = true;
+							break;
+						}
+					for (auto& writeSecondInst : writesSecond)
+						if (writeFirstInst == writeSecondInst)
+						{
+							firstBeforeSecond = true;
+							break;
+						}
+					if (firstBeforeSecond) break;
+				}
+
+				// second writes what first reads - second must come before first
+				bool secondBeforeFirst = false;
+				for (auto& writesSecondInst : writesSecond)
+				{
+					for (auto& readsFirstInst : readsFirst)
+						if (writesSecondInst == readsFirstInst)
+						{
+							secondBeforeFirst = true;
+							break;
+						}
+					if (secondBeforeFirst) break;
+				}
+
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
+				if (firstBeforeSecond && secondBeforeFirst)
+				{
+					std::cerr << "WARNING::SYSTEM_MANAGER::Circular data dependency between "
+					          << typeid(*SystemCore[first]).name() << " and " << typeid(*SystemCore[second]).name()
+					          << std::endl;
+				}
+#endif
+				if (firstBeforeSecond) addEdge(first, second);
+				if (secondBeforeFirst) addEdge(second, first);
+			}
+
+			// Explicit dependencies
+			for (auto& before : SystemCore[first]->getBeforeSystems())
+			{
+				auto it = typeToIndex.find(before);
+				if (it != typeToIndex.end()) addEdge(first, it->second);
+			}
+			for (auto& after : SystemCore[first]->getAfterSystems())
+			{
+				auto it = typeToIndex.find(after);
+				if (it != typeToIndex.end()) addEdge(it->second, first);
+			}
+		}
+
+		std::queue<size_t> q;
+		for (size_t i = 0; i < systemsSize; ++i)
+			if (inDegree[i] == 0) q.push(i);
+
+		size_t processed = 0;
+		while (!q.empty())
+		{
+			std::vector<ISystemCore*> layer;
+			size_t layerSize = q.size();
+			for (size_t i = 0; i < layerSize; ++i)
+			{
+				size_t curr = q.front();
+				q.pop();
+				layer.push_back(SystemCore[curr].get());
+				for (size_t next : neighbours[curr])
+					if (--inDegree[next] == 0) q.push(next);
+			}
+			_executionLayers.push_back(std::move(layer));
+			processed += layerSize;
+		}
+
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
+		if (processed != systemsSize)
+		{
+			throw std::runtime_error("SYSTEM_MANAGER: Cycle detected in system dependency graph! " +
+			                         std::to_string(systemsSize - processed) + " system(s) involved.");
+		}
+#endif
+
+		_executionOrderDirty = false;
+	}
+
 	void updateSystems(GeneralManager& gm)
 	{
-		for (auto& entry : SystemCore)
+		if (_executionOrderDirty) resolveExecutionSequence();
+
+		for (auto& layer : _executionLayers)
 		{
-			entry->update(gm);
+			if (layer.size() == 1)
+			{
+				layer[0]->update(gm);
+			}
+			else
+			{
+				std::vector<std::future<void>> futures;
+				for (auto* system : layer)
+				{
+					futures.push_back(std::async(std::launch::async, [system, &gm]() { system->update(gm); }));
+				}
+				for (auto& f : futures) f.get();
+			}
 		}
 	}
 };

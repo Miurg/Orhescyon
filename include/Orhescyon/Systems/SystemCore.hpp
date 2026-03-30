@@ -45,7 +45,27 @@ public:
 		return hasAllComponents<RequiredComponents...>(entity, gm, typeid(Derived).name());
 	}
 
-	virtual std::vector<std::type_index> getSystemDependencies() const
+	virtual std::vector<std::type_index> getReadComponents() override
+	{
+		return {};
+	}
+
+	virtual std::vector<std::type_index> getWriteComponents() override
+	{
+		return {};
+	}
+
+	virtual std::vector<std::type_index> getBeforeSystems() override
+	{
+		return {};
+	}
+
+	virtual std::vector<std::type_index> getAfterSystems() override
+	{
+		return {};
+	}
+
+	virtual std::vector<std::type_index> getSystemDependencies() override
 	{
 		return {};
 	}

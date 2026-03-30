@@ -18,7 +18,8 @@ add_executable(orhescyon-tests
         GMEntitiesTests.cpp
         GMComponentTests.cpp
         GMSystemTests.cpp
- "ActiveEntitySetTests.cpp" "ComponentArrayTests.cpp" "ComponentManagerTests.cpp" "GMEntitiesTests.cpp" "GMComponentTests.cpp" "GMSystemTests.cpp" "GMContextTests.cpp" )
+        SystemSequenceTests.cpp
+)
 
 target_link_libraries(orhescyon-tests
     PRIVATE

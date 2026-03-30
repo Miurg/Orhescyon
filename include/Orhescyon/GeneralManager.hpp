@@ -169,4 +169,4 @@ public:
 		return _componentManager.getComponent<TComponent>(_contextManager.getContext<TContext>());
 	}
 };
-}
+} // namespace Orhescyon

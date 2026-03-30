@@ -22,6 +22,12 @@ TEST(ComponentArray, GetNonexistentReturnsNull)
 {
     ComponentArray<Position> arr;
     EXPECT_EQ(arr.getComponent(999), nullptr);
+
+    for (int i = 0; i < 1000; i++)
+    {
+        arr.addComponent(i, Position{ 1.0f, 2.0f });
+    }
+    EXPECT_EQ(arr.getComponent(1001), nullptr);
 }
 
 TEST(ComponentArray, OverwriteExisting)
