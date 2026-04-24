@@ -91,11 +91,10 @@ public:
 		}
 	}
 
-	template <typename TSystem, typename... Args>
-	void addSystem(GeneralManager& gm, Args&&... args)
+	template <typename TSystem>
+	void addSystem(GeneralManager& gm, std::unique_ptr<TSystem> system)
 	{
 		static_assert(std::is_base_of_v<ISystemCore, TSystem>, "TSystem must derive from ISystemCore");
-		auto system = std::make_unique<TSystem>(std::forward<Args>(args)...);
 		SystemCore.push_back(std::move(system));
 		SystemCore.back()->onRegistered(gm);
 		_executionOrderDirty = true;

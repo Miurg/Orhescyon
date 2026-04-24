@@ -1,8 +1,19 @@
 #pragma once
 
-#include <memory>
+// Build-time safety tiers:
+//   (none)				 — no runtime checks.
+//   ORHESCYON_LOW_CHECK  — cheap guards.
+//   ORHESCYON_HIGH_CHECK — LOW + dev diagnostics.
+
 #include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <typeindex>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "Components/ComponentManager.hpp"
 #include "Entitys/EntityManager.hpp"
@@ -18,19 +29,40 @@ class GeneralManager
 private:
 	ComponentManager _componentManager;
 	EntityManager _entityManager;
-	SystemManager _systemManager;
 	ContextManager _contextManager;
+
+	std::unordered_map<std::string, SystemManager> _systemManagers;
+	std::vector<std::string> _systemManagerOrder;
+	std::unordered_map<std::type_index, std::string> _systemTypeToManager;
+
+	SystemManager* findSystemManager(std::string_view name)
+	{
+		auto it = _systemManagers.find(std::string(name));
+		return it == _systemManagers.end() ? nullptr : &it->second;
+	}
 
 public:
 	GeneralManager(const GeneralManager&) = delete;
 	GeneralManager& operator=(const GeneralManager&) = delete;
 	GeneralManager(GeneralManager&&) noexcept = default;
 	GeneralManager& operator=(GeneralManager&&) noexcept = default;
-	GeneralManager() = default;
-	// Shuts down systems in reverse registration order before managers are destroyed.
+
+	GeneralManager()
+	{
+		registerSystemManager("default");
+	}
+
+	// Shuts down SystemManagers in reverse registration order before managers are destroyed.
 	~GeneralManager()
 	{
-		_systemManager.onShutdown(*this);
+		for (auto it = _systemManagerOrder.rbegin(); it != _systemManagerOrder.rend(); ++it)
+		{
+			auto mapIt = _systemManagers.find(*it);
+			if (mapIt != _systemManagers.end())
+			{
+				mapIt->second.onShutdown(*this);
+			}
+		}
 	}
 
 	// Creates a new entity and marks it active.
@@ -41,12 +73,14 @@ public:
 	}
 
 	// Removes components first, then unsubscribes from all systems, then deactivates.
-	// Order matters: systems may access components in onEntityUnsubscribed.
 	void destroyEntity(Entity entity)
 	{
 		_entityManager.destroyEntity(entity);
 		_componentManager.removeEntity(entity);
-		_systemManager.unsubscribeFromAll(entity, *this);
+		for (auto& [name, sm] : _systemManagers)
+		{
+			sm.unsubscribeFromAll(entity, *this);
+		}
 	}
 
 	// Adds a component to the entity. Returns pointer to it or nullptr if inactive.
@@ -79,7 +113,10 @@ public:
 #endif
 
 		_componentManager.removeComponent<TComponent>(entity);
-		_systemManager.checkEntitySubscriptions(entity, *this);
+		for (auto& [name, sm] : _systemManagers)
+		{
+			sm.checkEntitySubscriptions(entity, *this);
+		}
 	}
 
 	// Returns pointer to the component or nullptr.
@@ -96,11 +133,55 @@ public:
 		return _componentManager.getComponent<TComponent>(entity);
 	}
 
-	// Registers a new system.
+	// Creates an empty SystemManager with the given name. Duplicate names warn+skip under HIGH_CHECK.
+	void registerSystemManager(std::string name)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (_systemManagers.find(name) != _systemManagers.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::RegisterSystemManager duplicate name \"" << name << "\". Ignored."
+			          << std::endl;
+			return;
+		}
+#endif
+		_systemManagerOrder.push_back(name);
+		_systemManagers.try_emplace(std::move(name));
+	}
+
+	// Returns the SystemManager registered under the given name.
+	SystemManager& getSystemManager(std::string_view name)
+	{
+		SystemManager* sm = findSystemManager(name);
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!sm)
+		{
+			throw std::runtime_error("GENERAL_MANAGER::getSystemManager: no SystemManager named \"" + std::string(name) +
+			                         "\"");
+		}
+#endif
+		return *sm;
+	}
+
+	// Registers a new system;
 	template <typename TSystem, typename... Args>
 	void registerSystem(Args&&... args)
 	{
-		_systemManager.addSystem<TSystem>(*this, std::forward<Args>(args)...);
+		static_assert(std::is_base_of_v<ISystemCore, TSystem>, "TSystem must derive from ISystemCore");
+
+		auto system = std::make_unique<TSystem>(std::forward<Args>(args)...);
+		std::string smName(system->getSystemManagerName());
+
+		SystemManager* sm = findSystemManager(smName);
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!sm)
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::RegisterSystem: SystemManager \"" << smName
+			          << "\" not found. Register it first via registerSystemManager." << std::endl;
+			return;
+		}
+#endif
+		_systemTypeToManager.insert_or_assign(std::type_index(typeid(TSystem)), smName);
+		sm->addSystem<TSystem>(*this, std::move(system));
 	}
 
 	// Subscribes an entity to a system.
@@ -115,7 +196,17 @@ public:
 		}
 #endif
 
-		_systemManager.subscribe<TSystem>(entity, *this);
+		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
+#ifdef ORHESCYON_HIGH_CHECK
+		if (it == _systemTypeToManager.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntity: system " << typeid(TSystem).name()
+			          << " not registered in any SystemManager" << std::endl;
+			return;
+		}
+#endif
+		SystemManager* sm = findSystemManager(it->second);
+		sm->subscribe<TSystem>(entity, *this);
 	}
 
 	// Unsubscribes an entity from a system.
@@ -130,13 +221,36 @@ public:
 		}
 #endif
 
-		_systemManager.unsubscribe<TSystem>(entity, *this);
+		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
+#ifdef ORHESCYON_HIGH_CHECK
+		if (it == _systemTypeToManager.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntity: system " << typeid(TSystem).name()
+			          << " not registered in any SystemManager" << std::endl;
+			return;
+		}
+#endif
+		SystemManager* sm = findSystemManager(it->second);
+		sm->unsubscribe<TSystem>(entity, *this);
 	}
 
-	// Updates all registered systems.
+	// Updates SystemManager with the given name.
+	void update(std::string_view name)
+	{
+		SystemManager* sm = findSystemManager(name);
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!sm)
+		{
+			throw std::runtime_error("GENERAL_MANAGER::update: no SystemManager named \"" + std::string(name) + "\"");
+		}
+#endif
+		sm->updateSystems(*this);
+	}
+
+	// Update default SystemManager.
 	void update()
 	{
-		_systemManager.updateSystems(*this);
+		update("default");
 	}
 
 	const ActiveEntitySet& getActiveEntities() const noexcept
