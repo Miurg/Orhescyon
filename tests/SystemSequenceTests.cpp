@@ -11,9 +11,7 @@
 
 using namespace Orhescyon;
 
-// ---------------------------------------------------------------------------
 // Component stubs — used only as type tokens for dependency declarations
-// ---------------------------------------------------------------------------
 struct CompA
 {
     int val = 0;
@@ -27,9 +25,6 @@ struct CompC
     int val = 0;
 };
 
-// ---------------------------------------------------------------------------
-// Execution order recording
-// ---------------------------------------------------------------------------
 static std::mutex g_logMutex;
 static std::vector<int> g_order;
 
@@ -54,9 +49,7 @@ static int pos(int id)
     return -1;
 }
 
-// ---------------------------------------------------------------------------
 // Systems: independent (no dependencies)
-// ---------------------------------------------------------------------------
 class IndA : public SystemCore<IndA>
 {
 public:
@@ -73,9 +66,7 @@ public:
     void update(GeneralManager&) override { record(2); }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: linear chain  A → B → C  via data dependencies
-// ---------------------------------------------------------------------------
 class ChainA : public SystemCore<ChainA>
 {
 public:
@@ -96,9 +87,7 @@ public:
     std::vector<std::type_index> getReadComponents() override { return {typeid(CompB)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: diamond  A → {B, C} → D
-// ---------------------------------------------------------------------------
 class DiamondA : public SystemCore<DiamondA>
 {
 public:
@@ -126,9 +115,7 @@ public:
     std::vector<std::type_index> getReadComponents() override { return {typeid(CompB), typeid(CompC)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: write/read conflict
-// ---------------------------------------------------------------------------
 class SysWriter : public SystemCore<SysWriter>
 {
 public:
@@ -142,9 +129,7 @@ public:
     std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: write/write conflict
-// ---------------------------------------------------------------------------
 class SysWriterA : public SystemCore<SysWriterA>
 {
 public:
@@ -158,9 +143,7 @@ public:
     std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: explicit getBeforeSystems
-// ---------------------------------------------------------------------------
 class ExplBeforeY : public SystemCore<ExplBeforeY>
 {
 public:
@@ -173,9 +156,7 @@ public:
     std::vector<std::type_index> getBeforeSystems() override { return {typeid(ExplBeforeY)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: explicit getAfterSystems
-// ---------------------------------------------------------------------------
 class ExplAfterX : public SystemCore<ExplAfterX>
 {
 public:
@@ -188,9 +169,7 @@ public:
     std::vector<std::type_index> getAfterSystems() override { return {typeid(ExplAfterX)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: mixed data + explicit dependencies  A → B → C
-// ---------------------------------------------------------------------------
 class MixedC : public SystemCore<MixedC>
 {
 public:
@@ -210,9 +189,7 @@ public:
     std::vector<std::type_index> getBeforeSystems() override { return {typeid(MixedC)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: circular explicit dependency  P ↔ Q
-// ---------------------------------------------------------------------------
 class CycP : public SystemCore<CycP>
 {
 public:
@@ -228,9 +205,7 @@ public:
 std::vector<std::type_index> CycP::getBeforeSystems() { return {typeid(CycQ)}; }
 std::vector<std::type_index> CycQ::getBeforeSystems() { return {typeid(CycP)}; }
 
-// ---------------------------------------------------------------------------
 // Systems: circular data dependency
-// ---------------------------------------------------------------------------
 class CycDataA : public SystemCore<CycDataA>
 {
 public:
@@ -246,9 +221,7 @@ public:
     std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: circular three  A → B → C → A
-// ---------------------------------------------------------------------------
 class CycThreeA : public SystemCore<CycThreeA>
 {
 public:
@@ -271,9 +244,7 @@ std::vector<std::type_index> CycThreeA::getBeforeSystems() { return {typeid(CycT
 std::vector<std::type_index> CycThreeB::getBeforeSystems() { return {typeid(CycThreeC)}; }
 std::vector<std::type_index> CycThreeC::getBeforeSystems() { return {typeid(CycThreeA)}; }
 
-// ---------------------------------------------------------------------------
 // Systems: reference to non-existent system in getBeforeSystems
-// ---------------------------------------------------------------------------
 class SysNeverRegistered : public SystemCore<SysNeverRegistered>
 {
 public:
@@ -286,9 +257,7 @@ public:
     std::vector<std::type_index> getBeforeSystems() override { return {typeid(SysNeverRegistered)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: parallel execution — sleep to verify concurrency
-// ---------------------------------------------------------------------------
 class SysSleepA : public SystemCore<SysSleepA>
 {
 public:
@@ -308,9 +277,7 @@ public:
     }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: dependent order verification via shared atomic
-// ---------------------------------------------------------------------------
 static std::atomic<int> g_sharedValue{0};
 static std::atomic<int> g_observedValue{0};
 
@@ -335,9 +302,7 @@ public:
     std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: single-system thread identity check
-// ---------------------------------------------------------------------------
 class SysThreadCheck : public SystemCore<SysThreadCheck>
 {
 public:
@@ -345,9 +310,7 @@ public:
     void update(GeneralManager&) override { recordedId = std::this_thread::get_id(); }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: bulk template for counter-based tests
-// ---------------------------------------------------------------------------
 template <int Id>
 class BulkSys : public SystemCore<BulkSys<Id>>
 {
@@ -356,9 +319,7 @@ public:
     void update(GeneralManager&) override { ++counter; }
 };
 
-// ---------------------------------------------------------------------------
 // Systems: cache invalidation
-// ---------------------------------------------------------------------------
 class CacheA : public SystemCore<CacheA>
 {
 public:
@@ -371,10 +332,6 @@ public:
     static inline std::atomic<int> counter{0};
     void update(GeneralManager&) override { ++counter; }
 };
-
-// ===========================================================================
-// Group 1: Execution Sequence (topological sort correctness)
-// ===========================================================================
 
 TEST(SystemSequence, IndependentSystemsSameLayer)
 {
@@ -494,10 +451,6 @@ TEST(SystemSequence, MixedDependencies)
     EXPECT_LT(pos(71), pos(72)); // B before C (explicit getBeforeSystems)
 }
 
-// ===========================================================================
-// Group 2: Negative Tests
-// ===========================================================================
-
 TEST(SystemSequence, CircularExplicitDependencyThrows)
 {
     GeneralManager gm;
@@ -531,10 +484,6 @@ TEST(SystemSequence, BeforeNonExistentSystemNoThrow)
     EXPECT_NO_THROW(gm.update());
     EXPECT_NE(pos(90), -1);
 }
-
-// ===========================================================================
-// Group 3: Parallel Execution
-// ===========================================================================
 
 TEST(SystemSequence, IndependentSystemsAllExecute)
 {
@@ -601,10 +550,6 @@ TEST(SystemSequence, SingleSystemRunsOnCallerThread)
 
     EXPECT_EQ(SysThreadCheck::recordedId, callerThread);
 }
-
-// ===========================================================================
-// Group 4: Edge Cases
-// ===========================================================================
 
 TEST(SystemSequence, NoSystemsUpdateSafe)
 {
