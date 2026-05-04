@@ -34,18 +34,18 @@ TEST(JobPool, ExplicitSizeIsHonored)
     EXPECT_EQ(pool.threadCount(), 4u);
 }
 
-TEST(JobPool, SubmitReturnsTypedResult)
+TEST(JobPool, SubmitAsyncReturnsTypedResult)
 {
     JobPool pool(2);
-    auto fut = pool.submit([](int a, int b) { return a + b; }, 2, 3);
+    auto fut = pool.submitAsync([](int a, int b) { return a + b; }, 2, 3);
     EXPECT_EQ(fut.get(), 5);
 }
 
-TEST(JobPool, SubmitVoidTask)
+TEST(JobPool, SubmitAsyncVoidTask)
 {
     JobPool pool(2);
     std::atomic<bool> ran{false};
-    auto fut = pool.submit([&] { ran.store(true); });
+    auto fut = pool.submitAsync([&] { ran.store(true); });
     EXPECT_NO_THROW(fut.get());
     EXPECT_TRUE(ran.load());
 }
@@ -59,7 +59,7 @@ TEST(JobPool, ManyTasksAllRun)
     std::vector<std::future<void>> futures;
     futures.reserve(N);
     for (int i = 0; i < N; ++i)
-        futures.push_back(pool.submit([&] { counter.fetch_add(1, std::memory_order_relaxed); }));
+        futures.push_back(pool.submitAsync([&] { counter.fetch_add(1, std::memory_order_relaxed); }));
 
     for (auto& f : futures) f.get();
     EXPECT_EQ(counter.load(), N);
@@ -68,7 +68,7 @@ TEST(JobPool, ManyTasksAllRun)
 TEST(JobPool, ExceptionPropagatedThroughFuture)
 {
     JobPool pool(1);
-    auto fut = pool.submit([] { throw std::runtime_error("boom"); });
+    auto fut = pool.submitAsync([] { throw std::runtime_error("boom"); });
     EXPECT_THROW(fut.get(), std::runtime_error);
 }
 
@@ -79,7 +79,7 @@ TEST(JobPool, DestructorJoinsAllThreads)
         std::atomic<int> counter{0};
         std::vector<std::future<void>> futures;
         for (int i = 0; i < 16; ++i)
-            futures.push_back(pool.submit([&] { counter.fetch_add(1); }));
+            futures.push_back(pool.submitAsync([&] { counter.fetch_add(1); }));
         for (auto& f : futures) f.get();
         EXPECT_EQ(counter.load(), 16);
     });
@@ -95,7 +95,7 @@ TEST(JobPool, BlockingTasksDoNotDeadlockOnDestruction)
         {
             JobPool pool(4);
             for (int i = 0; i < 4; ++i)
-                pool.submit([&] {
+                pool.submitAsync([&] {
                     started.fetch_add(1);
                     std::this_thread::sleep_for(50ms);
                     finished.fetch_add(1);
@@ -108,6 +108,66 @@ TEST(JobPool, BlockingTasksDoNotDeadlockOnDestruction)
     ASSERT_EQ(run.wait_for(3s), std::future_status::ready) << "destructor deadlocked";
     run.get();
 }
+
+TEST(JobPool, SubmitFireAndForgetRunsTask)
+{
+    JobPool pool(2);
+    std::atomic<bool> ran{false};
+    std::promise<void> done;
+    auto fut = done.get_future();
+
+    pool.submit([&ran, &done] {
+        ran.store(true);
+        done.set_value();
+    });
+
+    ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+    EXPECT_TRUE(ran.load());
+}
+
+TEST(JobPool, SubmitManyFireAndForgetAllRun)
+{
+    constexpr int N = 1000;
+    JobPool pool(4);
+
+    std::atomic<int> counter{0};
+    std::promise<void> allDone;
+    auto fut = allDone.get_future();
+
+    for (int i = 0; i < N; ++i)
+    {
+        pool.submit([&counter, &allDone] {
+            if (counter.fetch_add(1, std::memory_order_acq_rel) + 1 == N)
+                allDone.set_value();
+        });
+    }
+
+    ASSERT_EQ(fut.wait_for(2s), std::future_status::ready);
+    EXPECT_EQ(counter.load(), N);
+}
+
+TEST(JobPool, SubmitFireAndForgetDestructorWaitsForRunningTasks)
+{
+    std::atomic<int> finished{0};
+    auto run = std::async(std::launch::async, [&finished] {
+        std::atomic<int> started{0};
+        {
+            JobPool pool(4);
+            for (int i = 0; i < 4; ++i)
+                pool.submit([&started, &finished] {
+                    started.fetch_add(1);
+                    std::this_thread::sleep_for(50ms);
+                    finished.fetch_add(1);
+                });
+            while (started.load() < 4) std::this_thread::sleep_for(1ms);
+        }
+    });
+
+    ASSERT_EQ(run.wait_for(3s), std::future_status::ready) << "destructor deadlocked";
+    run.get();
+    EXPECT_EQ(finished.load(), 4);
+}
+
 
 TEST(JobPool, ConstructorRejectsZeroThreadCount)
 {
@@ -126,7 +186,7 @@ TEST(JobPool, QueuedTasksGetBrokenPromiseOnPoolDestruction)
     std::thread owner([&] {
         JobPool pool(1);
 
-        longFut = pool.submit([&] {
+        longFut = pool.submitAsync([&] {
             longStarted.store(true, std::memory_order_release);
             while (!release.load(std::memory_order_acquire))
                 std::this_thread::sleep_for(1ms);
@@ -137,7 +197,7 @@ TEST(JobPool, QueuedTasksGetBrokenPromiseOnPoolDestruction)
             std::this_thread::sleep_for(1ms);
 
         for (int i = 0; i < 5; ++i)
-            queuedFutures.push_back(pool.submit([i] { return i; }));
+            queuedFutures.push_back(pool.submitAsync([i] { return i; }));
     });
 
     // let owner enter ~JobPool (sets _stop) while the worker is still in the long task
@@ -165,8 +225,8 @@ TEST(JobPool, ExceptionInTaskDoesNotKillWorker)
 {
     JobPool pool(1);
 
-    auto bad = pool.submit([] { throw std::runtime_error("first"); });
-    auto good = pool.submit([] { return 7; });
+    auto bad = pool.submitAsync([] { throw std::runtime_error("first"); });
+    auto good = pool.submitAsync([] { return 7; });
 
     EXPECT_THROW(bad.get(), std::runtime_error);
     EXPECT_EQ(good.get(), 7);
@@ -446,6 +506,24 @@ TEST(JobPoolRobustness, ParallelForAcceptsRandomAccessIteratorRange)
 TEST(JobPoolRobustness, ParallelForAcceptsForwardIteratorRange)
 {
     auto r = buildCompileCheckTarget("JobPoolCompile_ForwardIteratorRange");
+    EXPECT_EQ(r.exitCode, 0) << "command: " << r.commandLine << "\n--- output ---\n" << r.output;
+}
+
+TEST(JobPoolRobustness, SubmitForwardsArgs)
+{
+    auto r = buildCompileCheckTarget("JobPoolCompile_SubmitForwardsArgs");
+    EXPECT_EQ(r.exitCode, 0) << "command: " << r.commandLine << "\n--- output ---\n" << r.output;
+}
+
+TEST(JobPoolRobustness, SubmitAcceptsMoveOnlyCallable)
+{
+    auto r = buildCompileCheckTarget("JobPoolCompile_SubmitMoveOnlyCallable");
+    EXPECT_EQ(r.exitCode, 0) << "command: " << r.commandLine << "\n--- output ---\n" << r.output;
+}
+
+TEST(JobPoolRobustness, SubmitAcceptsMoveOnlyArg)
+{
+    auto r = buildCompileCheckTarget("JobPoolCompile_SubmitMoveOnlyArg");
     EXPECT_EQ(r.exitCode, 0) << "command: " << r.commandLine << "\n--- output ---\n" << r.output;
 }
 

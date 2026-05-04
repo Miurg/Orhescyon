@@ -84,8 +84,29 @@ public:
 		return _workers.size();
 	}
 
+	// Fire-and-forget: no future. Mirrors submitAsync's binding shape, just without packaged_task.
 	template <typename Callable, typename... Args>
-	auto submit(Callable&& f, Args&&... args) -> std::future<std::invoke_result_t<Callable, Args...>>
+	void submit(Callable&& f, Args&&... args)
+	{
+		auto bound =
+		    [
+				func = std::forward<Callable>(f),
+				tup = std::make_tuple(std::forward<Args>(args)...)
+			]() mutable
+		    { std::apply(std::move(func), std::move(tup)); };
+
+		auto task = std::make_shared<decltype(bound)>(std::move(bound));
+
+		{
+			std::lock_guard<std::mutex> lock(_mutex);
+			if (_stop) throw std::runtime_error("JobPool: submit on stopped pool");
+			_tasks.emplace([task] { (*task)(); });
+		}
+		_cvar.notify_one();
+	}
+
+	template <typename Callable, typename... Args>
+	auto submitAsync(Callable&& f, Args&&... args) -> std::future<std::invoke_result_t<Callable, Args...>>
 	{
 		using ReturnType = std::invoke_result_t<Callable, Args...>;
 
@@ -93,16 +114,17 @@ public:
 		auto task = std::make_shared<std::packaged_task<ReturnType()>>
 		(
 		    [
-				func = std::forward<Callable>(f), 
+				func = std::forward<Callable>(f),
 				tup = std::make_tuple(std::forward<Args>(args)...)
 			]() mutable -> ReturnType
 		    { return std::apply(std::move(func), std::move(tup)); }
 		);
 
 		std::future<ReturnType> fut = task->get_future();
+
 		{
 			std::lock_guard<std::mutex> lock(_mutex);
-			if (_stop) throw std::runtime_error("JobPool: submit on stopped pool");
+			if (_stop) throw std::runtime_error("JobPool: submitAsync on stopped pool");
 			_tasks.emplace([task] { (*task)(); });
 		}
 		_cvar.notify_one();
@@ -146,7 +168,7 @@ public:
 
 			Index endIteration = beginIteration + size;
 
-			futures.emplace_back(submit(
+			futures.emplace_back(submitAsync(
 			    [localFunc, beginIteration, endIteration]
 			    {
 				    for (auto it = beginIteration; it != endIteration; ++it) (*localFunc)(it);
@@ -192,7 +214,7 @@ private:
 			std::size_t size = chunkSize + (i < reminders ? 1 : 0);
 			auto endIteration = beginIteration + size;
 
-			futures.emplace_back(submit(
+			futures.emplace_back(submitAsync(
 			    [localFunc, beginIteration, endIteration]
 			    {
 				    for (auto it = beginIteration; it != endIteration; ++it) (*localFunc)(*it);
@@ -230,7 +252,7 @@ private:
 			std::size_t beginIdx = cursor;
 			std::size_t endIdx = cursor + size;
 
-			futures.emplace_back(submit(
+			futures.emplace_back(submitAsync(
 			    [localFunc, iters, beginIdx, endIdx]
 			    {
 				    for (std::size_t k = beginIdx; k < endIdx; ++k) (*localFunc)(*(*iters)[k]);

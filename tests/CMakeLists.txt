@@ -56,6 +56,9 @@ orhescyon_add_compile_check(JobPoolCompile_LvalueCallable             Jobs/Compi
 orhescyon_add_compile_check(JobPoolCompile_MoveOnlyCallable           Jobs/Compile/MoveOnlyCallable.cpp)
 orhescyon_add_compile_check(JobPoolCompile_RandomAccessIteratorRange  Jobs/Compile/RandomAccessIteratorRange.cpp)
 orhescyon_add_compile_check(JobPoolCompile_ForwardIteratorRange       Jobs/Compile/ForwardIteratorRange.cpp)
+orhescyon_add_compile_check(JobPoolCompile_SubmitForwardsArgs         Jobs/Compile/SubmitForwardsArgs.cpp)
+orhescyon_add_compile_check(JobPoolCompile_SubmitMoveOnlyCallable     Jobs/Compile/SubmitMoveOnlyCallable.cpp)
+orhescyon_add_compile_check(JobPoolCompile_SubmitMoveOnlyArg          Jobs/Compile/SubmitMoveOnlyArg.cpp)
 
 include(GoogleTest)
 gtest_discover_tests(orhescyon-tests)
