@@ -1,9 +1,9 @@
 #pragma once
+
 #include <Orhescyon/Jobs/JobGroup.hpp>
 
 #include <algorithm>
 #include <condition_variable>
-#include <cstddef>
 #include <functional>
 #include <future>
 #include <iterator>
@@ -88,12 +88,8 @@ public:
 	template <typename Callable, typename... Args>
 	void submit(Callable&& f, Args&&... args)
 	{
-		auto bound =
-		    [
-				func = std::forward<Callable>(f),
-				tup = std::make_tuple(std::forward<Args>(args)...)
-			]() mutable
-		    { std::apply(std::move(func), std::move(tup)); };
+		auto bound = [func = std::forward<Callable>(f), tup = std::make_tuple(std::forward<Args>(args)...)]() mutable
+		{ std::apply(std::move(func), std::move(tup)); };
 
 		auto task = std::make_shared<decltype(bound)>(std::move(bound));
 
@@ -111,14 +107,9 @@ public:
 		using ReturnType = std::invoke_result_t<Callable, Args...>;
 
 		// shared_ptr: packaged_task is move-only, std::function in the queue isn't
-		auto task = std::make_shared<std::packaged_task<ReturnType()>>
-		(
-		    [
-				func = std::forward<Callable>(f),
-				tup = std::make_tuple(std::forward<Args>(args)...)
-			]() mutable -> ReturnType
-		    { return std::apply(std::move(func), std::move(tup)); }
-		);
+		auto task = std::make_shared<std::packaged_task<ReturnType()>>(
+		    [func = std::forward<Callable>(f), tup = std::make_tuple(std::forward<Args>(args)...)]() mutable -> ReturnType
+		    { return std::apply(std::move(func), std::move(tup)); });
 
 		std::future<ReturnType> fut = task->get_future();
 
@@ -175,7 +166,7 @@ public:
 			    }));
 			beginIteration = endIteration;
 		}
-		
+
 		return JobGroup{std::move(futures)};
 	}
 

@@ -24,6 +24,9 @@ public:
 	virtual std::vector<std::type_index> getSystemDependencies() = 0;
 	virtual void onEntitySubscribed(Entity entity, GeneralManager& gm) = 0;
 	virtual void onEntityUnsubscribed(Entity entity, GeneralManager& gm) = 0;
-	virtual std::string_view getSystemManagerName() const { return "default"; }
+	virtual std::string_view getSystemManagerName() const
+	{
+		return "default";
+	}
 };
-}
+} // namespace Orhescyon

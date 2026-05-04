@@ -1,4 +1,5 @@
 #pragma once
+
 #include <vector>
 #include <iostream>
 
@@ -33,54 +34,54 @@ protected:
 	}
 
 public:
-	virtual ~SystemCore() = default;
+	~SystemCore() override = default;
 
-	virtual void update(GeneralManager& gm)
+	void update(GeneralManager& gm) override
 	{
 		// Optional: Override in derived class if needed
 	}
 
-	virtual bool shouldProcessEntity(Entity entity, GeneralManager& gm)
+	bool shouldProcessEntity(Entity entity, GeneralManager& gm) override
 	{
 		return hasAllComponents<RequiredComponents...>(entity, gm, typeid(Derived).name());
 	}
 
-	virtual std::vector<std::type_index> getReadComponents() override
+	std::vector<std::type_index> getReadComponents() override
 	{
 		return {};
 	}
 
-	virtual std::vector<std::type_index> getWriteComponents() override
+	std::vector<std::type_index> getWriteComponents() override
 	{
 		return {};
 	}
 
-	virtual std::vector<std::type_index> getBeforeSystems() override
+	std::vector<std::type_index> getBeforeSystems() override
 	{
 		return {};
 	}
 
-	virtual std::vector<std::type_index> getAfterSystems() override
+	std::vector<std::type_index> getAfterSystems() override
 	{
 		return {};
 	}
 
-	virtual std::vector<std::type_index> getSystemDependencies() override
+	std::vector<std::type_index> getSystemDependencies() override
 	{
 		return {};
 	}
 
-	virtual void onRegistered(GeneralManager& gm)
+	void onRegistered(GeneralManager& gm) override
 	{
 		// Optional: Override in derived class if needed
 	}
 
-	virtual void onShutdown(GeneralManager& gm)
+	void onShutdown(GeneralManager& gm) override
 	{
 		// Optional: Override in derived class if needed
 	}
 
-	virtual void onEntitySubscribed(Entity entity, GeneralManager& gm)
+	void onEntitySubscribed(Entity entity, GeneralManager& gm) override
 	{
 		if (!shouldProcessEntity(entity, gm))
 		{
@@ -88,10 +89,9 @@ public:
 		}
 	}
 
-	virtual void onEntityUnsubscribed(Entity entity, GeneralManager& gm)
+	void onEntityUnsubscribed(Entity entity, GeneralManager& gm) override
 	{
 		// Optional: Override in derived class if needed
 	}
 };
-}
-    
+} // namespace Orhescyon

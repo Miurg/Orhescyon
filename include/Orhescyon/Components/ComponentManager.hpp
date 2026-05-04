@@ -3,7 +3,6 @@
 #include <memory>
 #include <typeindex>
 #include <unordered_map>
-#include <vector>
 
 #include "../Entitys/EntityManager.hpp"
 #include "ComponentArray.hpp"

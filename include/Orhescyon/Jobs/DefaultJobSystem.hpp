@@ -1,4 +1,5 @@
 #pragma once
+
 #include <Orhescyon/Jobs/IJobSystem.hpp>
 #include <Orhescyon/Jobs/JobPool.hpp>
 

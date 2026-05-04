@@ -1,4 +1,5 @@
 #pragma once
+
 #include <algorithm>
 #include <iostream>
 #include <memory>
@@ -336,8 +337,7 @@ public:
 			}
 			else
 			{
-				jobSystem.parallelFor(layer.size(),
-				                      [&layer, &gm](std::size_t index) { layer[index]->update(gm); });
+				jobSystem.parallelFor(layer.size(), [&layer, &gm](std::size_t index) { layer[index]->update(gm); });
 			}
 		}
 	}

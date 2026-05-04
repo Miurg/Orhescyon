@@ -1,4 +1,5 @@
 #pragma once
+
 #include <exception>
 #include <future>
 #include <utility>
@@ -15,9 +16,7 @@ private:
 public:
 	JobGroup() = default;
 
-	explicit JobGroup(std::vector<std::future<void>>&& futures) noexcept : _futures(std::move(futures))
-	{
-	}
+	explicit JobGroup(std::vector<std::future<void>>&& futures) noexcept : _futures(std::move(futures)) {}
 
 	JobGroup(const JobGroup&) = delete;
 	JobGroup& operator=(const JobGroup&) = delete;

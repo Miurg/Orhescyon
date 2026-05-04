@@ -2,7 +2,6 @@
 
 #include <vector>
 #include <cstdint>
-#include <algorithm>
 
 using Entity = uint32_t;
 namespace Orhescyon
