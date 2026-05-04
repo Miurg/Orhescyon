@@ -6,11 +6,11 @@
 #include <unordered_map>
 #include <vector>
 #include <queue>
-#include <future>
 #include <set>
 
 #include "ISystemCore.hpp"
 #include "../Entitys/ActiveEntitySet.hpp"
+#include "../Jobs/IJobSystem.hpp"
 
 namespace Orhescyon
 {
@@ -324,7 +324,7 @@ public:
 		_executionOrderDirty = false;
 	}
 
-	void updateSystems(GeneralManager& gm)
+	void updateSystems(GeneralManager& gm, IJobSystem& jobSystem)
 	{
 		if (_executionOrderDirty) resolveExecutionSequence();
 
@@ -336,12 +336,8 @@ public:
 			}
 			else
 			{
-				std::vector<std::future<void>> futures;
-				for (auto* system : layer)
-				{
-					futures.push_back(std::async(std::launch::async, [system, &gm]() { system->update(gm); }));
-				}
-				for (auto& f : futures) f.get();
+				jobSystem.parallelFor(layer.size(),
+				                      [&layer, &gm](std::size_t index) { layer[index]->update(gm); });
 			}
 		}
 	}

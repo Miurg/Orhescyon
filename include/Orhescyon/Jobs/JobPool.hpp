@@ -113,7 +113,6 @@ public:
 	template <typename Index, typename Func>
 	void parallelFor(Index begin, Index end, Func&& func)
 	{
-
 		parallelForAsync(begin, end, std::forward<Func>(func)).wait();
 	}
 

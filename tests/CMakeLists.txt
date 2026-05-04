@@ -20,7 +20,9 @@ add_executable(orhescyon-tests
         GMSystemTests.cpp
         SystemSequenceTests.cpp
         GMMultiManagerTests.cpp
+        GMJobSystemTests.cpp
         Jobs/JobPoolTests.cpp
+        Jobs/DefaultJobSystemTests.cpp
 )
 
 target_link_libraries(orhescyon-tests

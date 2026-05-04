@@ -20,6 +20,7 @@
 #include "Entitys/ActiveEntitySet.hpp"
 #include "Systems/SystemManager.hpp"
 #include "Contexts/ContextManager.hpp"
+#include "Jobs/DefaultJobSystem.hpp"
 
 namespace Orhescyon
 {
@@ -27,6 +28,9 @@ namespace Orhescyon
 class GeneralManager
 {
 private:
+	std::unique_ptr<IJobSystem> _ownedJobSystem;
+	IJobSystem* _jobSystem = nullptr;
+
 	ComponentManager _componentManager;
 	EntityManager _entityManager;
 	ContextManager _contextManager;
@@ -49,7 +53,30 @@ public:
 
 	GeneralManager()
 	{
+		_ownedJobSystem = std::make_unique<DefaultJobSystem>();
+		_jobSystem = _ownedJobSystem.get();
 		registerSystemManager("default");
+	}
+
+	explicit GeneralManager(IJobSystem* userJobSystem)
+	{
+		_jobSystem = userJobSystem;
+		registerSystemManager("default");
+	}
+
+	// Replaces the active job system. Caller must ensure no update is in flight.
+	void setJobSystem(IJobSystem* userJobSystem)
+	{
+		if (userJobSystem)
+		{
+			_jobSystem = userJobSystem;
+			_ownedJobSystem.reset();
+		}
+		else
+		{
+			_ownedJobSystem = std::make_unique<DefaultJobSystem>();
+			_jobSystem = _ownedJobSystem.get();
+		}
 	}
 
 	// Shuts down SystemManagers in reverse registration order before managers are destroyed.
@@ -244,7 +271,7 @@ public:
 			throw std::runtime_error("GENERAL_MANAGER::update: no SystemManager named \"" + std::string(name) + "\"");
 		}
 #endif
-		sm->updateSystems(*this);
+		sm->updateSystems(*this, *_jobSystem);
 	}
 
 	// Update default SystemManager.
