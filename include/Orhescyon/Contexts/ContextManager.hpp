@@ -1,10 +1,7 @@
 #pragma once
 
-#include <unordered_map>
 #include <typeinfo>
 #include <iostream>
-
-#include "../Entitys/EntityManager.hpp"
 
 namespace Orhescyon
 {

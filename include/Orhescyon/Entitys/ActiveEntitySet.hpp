@@ -1,9 +1,11 @@
 #pragma once
 
-#include <vector>
 #include <cstdint>
+#include <limits>
+#include <vector>
 
-using Entity = uint32_t;
+#include "Entity.hpp"
+
 namespace Orhescyon
 {
 // Sparse/dense set — O(1) insert, erase (swap-with-last), and contains.
@@ -22,7 +24,7 @@ public:
 	void insert(Entity entity)
 	{
 		if (contains(entity)) return;
-		if (entity >= _sparse.size()) _sparse.resize(entity + 1, static_cast<size_t>(-1));
+		if (entity >= _sparse.size()) _sparse.resize(entity + 1, INVALID_INDEX);
 		_sparse[entity] = _dense.size();
 		_dense.push_back(entity);
 	}
@@ -35,7 +37,7 @@ public:
 		_dense[idx] = last;
 		_sparse[last] = idx;
 		_dense.pop_back();
-		_sparse[entity] = static_cast<size_t>(-1);
+		_sparse[entity] = INVALID_INDEX;
 	}
 
 	void clear() noexcept
@@ -64,6 +66,8 @@ public:
 	}
 
 private:
+	static constexpr size_t INVALID_INDEX = std::numeric_limits<size_t>::max();
+
 	std::vector<Entity> _dense;
 	std::vector<size_t> _sparse;
 };
