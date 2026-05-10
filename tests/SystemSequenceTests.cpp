@@ -638,3 +638,276 @@ TEST(SystemSequence, MultipleUpdatesStable)
     EXPECT_EQ(BulkSys<20>::counter.load(), 3);
     EXPECT_EQ(BulkSys<21>::counter.load(), 3);
 }
+
+// Systems: write-write split by an explicit barrier.
+// Verifies that two systems writing the same component but separated in time by a
+// barrier do not produce an ordering cycle, regardless of registration order.
+class WWBarrier : public SystemCore<WWBarrier>
+{
+public:
+    void update(GeneralManager&) override { record(200); }
+};
+class WWBeforeBarrier : public SystemCore<WWBeforeBarrier>
+{
+public:
+    void update(GeneralManager&) override { record(201); }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+    std::vector<std::type_index> getBeforeSystems() override { return {typeid(WWBarrier)}; }
+};
+class WWAfterBarrier : public SystemCore<WWAfterBarrier>
+{
+public:
+    void update(GeneralManager&) override { record(202); }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+    std::vector<std::type_index> getAfterSystems() override { return {typeid(WWBarrier)}; }
+};
+
+TEST(SystemSequence, WriteWriteWithBarrierRegisteredBeforeAfter)
+{
+    resetLog();
+    GeneralManager gm;
+    gm.registerSystem<WWBarrier>();
+    gm.registerSystem<WWBeforeBarrier>();
+    gm.registerSystem<WWAfterBarrier>();
+    EXPECT_NO_THROW(gm.update());
+
+    ASSERT_NE(pos(200), -1);
+    ASSERT_NE(pos(201), -1);
+    ASSERT_NE(pos(202), -1);
+    EXPECT_LT(pos(201), pos(200));
+    EXPECT_LT(pos(200), pos(202));
+}
+
+TEST(SystemSequence, WriteWriteWithBarrierRegisteredAfterBefore)
+{
+    resetLog();
+    GeneralManager gm;
+    gm.registerSystem<WWBarrier>();
+    gm.registerSystem<WWAfterBarrier>();
+    gm.registerSystem<WWBeforeBarrier>();
+    EXPECT_NO_THROW(gm.update());
+
+    ASSERT_NE(pos(200), -1);
+    ASSERT_NE(pos(201), -1);
+    ASSERT_NE(pos(202), -1);
+    EXPECT_LT(pos(201), pos(200));
+    EXPECT_LT(pos(200), pos(202));
+}
+
+// Systems: partial write-write conflict.
+// X writes {CompA, CompB}; Y writes {CompA}; Z writes {CompB}. Y and Z do not conflict
+// with each other, so greedy coloring should place X alone in sublayer 0 and Y, Z together
+// in sublayer 1, allowing Y and Z to run concurrently.
+class WWPartialX : public SystemCore<WWPartialX>
+{
+public:
+    void update(GeneralManager&) override
+    {
+        record(210);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA), typeid(CompB)}; }
+};
+class WWPartialY : public SystemCore<WWPartialY>
+{
+public:
+    void update(GeneralManager&) override
+    {
+        record(211);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+};
+class WWPartialZ : public SystemCore<WWPartialZ>
+{
+public:
+    void update(GeneralManager&) override
+    {
+        record(212);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
+};
+
+TEST(SystemSequence, WriteWritePartialConflictKeepsParallelism)
+{
+    resetLog();
+    GeneralManager gm;
+    gm.registerSystem<WWPartialX>();
+    gm.registerSystem<WWPartialY>();
+    gm.registerSystem<WWPartialZ>();
+
+    auto start = std::chrono::steady_clock::now();
+    gm.update();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+
+    // X alone (~50ms) then Y and Z parallel (~50ms) should total ~100ms.
+    // Full serialization would be ~150ms.
+    EXPECT_LT(ms, 140);
+    ASSERT_NE(pos(210), -1);
+    ASSERT_NE(pos(211), -1);
+    ASSERT_NE(pos(212), -1);
+    EXPECT_LT(pos(210), pos(211));
+    EXPECT_LT(pos(210), pos(212));
+}
+
+// Systems: write-write pair must be SERIALIZED (not just ordered by record).
+// If postpass mistakenly leaves both in the same sublayer, parallelFor would run
+// them concurrently and total time would collapse to ~50ms instead of ~100ms.
+class WWSerialA : public SystemCore<WWSerialA>
+{
+public:
+    void update(GeneralManager&) override
+    {
+        record(220);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+};
+class WWSerialB : public SystemCore<WWSerialB>
+{
+public:
+    void update(GeneralManager&) override
+    {
+        record(221);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+};
+
+TEST(SystemSequence, WriteWriteActuallySerialized)
+{
+    resetLog();
+    GeneralManager gm;
+    gm.registerSystem<WWSerialA>();
+    gm.registerSystem<WWSerialB>();
+
+    auto start = std::chrono::steady_clock::now();
+    gm.update();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+
+    // Sequential ~100ms. Parallel (regression) ~50ms. Generous lower bound.
+    EXPECT_GE(ms, 95);
+    EXPECT_LT(pos(220), pos(221));
+}
+
+// Systems: 4 non-writers + 2 write-writers in the same provisional layer.
+// Postpass should put 5 systems (4 non-writers + first writer) in sublayer 0 and
+// only the second writer in sublayer 1, preserving most parallelism.
+template <int Id>
+class WWParaNoWrite : public SystemCore<WWParaNoWrite<Id>>
+{
+public:
+    void update(GeneralManager&) override { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+};
+class WWParaWriter1 : public SystemCore<WWParaWriter1>
+{
+public:
+    void update(GeneralManager&) override { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+};
+class WWParaWriter2 : public SystemCore<WWParaWriter2>
+{
+public:
+    void update(GeneralManager&) override { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+};
+
+TEST(SystemSequence, WriteWriteParallelismPreservedAroundConflict)
+{
+    GeneralManager gm;
+    gm.registerSystem<WWParaNoWrite<0>>();
+    gm.registerSystem<WWParaNoWrite<1>>();
+    gm.registerSystem<WWParaNoWrite<2>>();
+    gm.registerSystem<WWParaNoWrite<3>>();
+    gm.registerSystem<WWParaWriter1>();
+    gm.registerSystem<WWParaWriter2>();
+
+    auto start = std::chrono::steady_clock::now();
+    gm.update();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+
+    // Correct split: 5-wide sublayer (~50-150ms depending on thread count) + 1 alone (~50ms).
+    // Regression where the conflict drags everyone into serial: 6 * 50ms = 300ms.
+    EXPECT_LT(ms, 250);
+}
+
+// Systems: two stacked provisional layers, each with its own write-write pair.
+// Verifies the postpass operates on each layer independently — a leaked write-set
+// accumulator across layers would corrupt the second layer's coloring.
+class WWStackL1A : public SystemCore<WWStackL1A>
+{
+public:
+    void update(GeneralManager&) override { record(240); }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+};
+class WWStackL1B : public SystemCore<WWStackL1B>
+{
+public:
+    void update(GeneralManager&) override { record(241); }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+};
+class WWStackL2C : public SystemCore<WWStackL2C>
+{
+public:
+    void update(GeneralManager&) override { record(242); }
+    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
+};
+class WWStackL2D : public SystemCore<WWStackL2D>
+{
+public:
+    void update(GeneralManager&) override { record(243); }
+    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
+};
+
+TEST(SystemSequence, WriteWriteSplitInMultipleLayersIndependently)
+{
+    resetLog();
+    GeneralManager gm;
+    gm.registerSystem<WWStackL1A>();
+    gm.registerSystem<WWStackL1B>();
+    gm.registerSystem<WWStackL2C>();
+    gm.registerSystem<WWStackL2D>();
+    EXPECT_NO_THROW(gm.update());
+
+    ASSERT_NE(pos(240), -1);
+    ASSERT_NE(pos(241), -1);
+    ASSERT_NE(pos(242), -1);
+    ASSERT_NE(pos(243), -1);
+    EXPECT_LT(pos(240), pos(241));
+    EXPECT_LT(pos(241), pos(242));
+    EXPECT_LT(pos(242), pos(243));
+}
+
+// Systems: two systems with shared write component AND mutual explicit before-cycle.
+// Removing the implicit write-write edge must not suppress detection of a real cycle
+// formed via explicit dependencies.
+class WWCycleA : public SystemCore<WWCycleA>
+{
+public:
+    void update(GeneralManager&) override {}
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+    std::vector<std::type_index> getBeforeSystems() override;
+};
+class WWCycleB : public SystemCore<WWCycleB>
+{
+public:
+    void update(GeneralManager&) override {}
+    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
+    std::vector<std::type_index> getBeforeSystems() override;
+};
+std::vector<std::type_index> WWCycleA::getBeforeSystems() { return {typeid(WWCycleB)}; }
+std::vector<std::type_index> WWCycleB::getBeforeSystems() { return {typeid(WWCycleA)}; }
+
+TEST(SystemSequence, CycleViaExplicitBetweenWriteWriteSystemsThrows)
+{
+    GeneralManager gm;
+    gm.registerSystem<WWCycleA>();
+    gm.registerSystem<WWCycleB>();
+    EXPECT_THROW(gm.update(), std::runtime_error);
+}

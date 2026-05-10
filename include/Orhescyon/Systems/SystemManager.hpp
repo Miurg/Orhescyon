@@ -236,18 +236,12 @@ public:
 				const auto writesSecond = SystemCore[second]->getWriteComponents();
 				const auto readsSecond = SystemCore[second]->getReadComponents();
 
-				// first writes what second reads or writes - first must come before second
+				// first writes what second reads - first must come before second
 				bool firstBeforeSecond = false;
 				for (auto& writeFirstInst : writesFirst)
 				{
 					for (auto& readsSecondInst : readsSecond)
 						if (writeFirstInst == readsSecondInst)
-						{
-							firstBeforeSecond = true;
-							break;
-						}
-					for (auto& writeSecondInst : writesSecond)
-						if (writeFirstInst == writeSecondInst)
 						{
 							firstBeforeSecond = true;
 							break;
@@ -293,6 +287,7 @@ public:
 			}
 		}
 
+		std::vector<std::vector<size_t>> provisionalLayers;
 		std::queue<size_t> q;
 		for (size_t i = 0; i < systemsSize; ++i)
 			if (inDegree[i] == 0) q.push(i);
@@ -300,18 +295,67 @@ public:
 		size_t processed = 0;
 		while (!q.empty())
 		{
-			std::vector<ISystemCore*> layer;
+			std::vector<size_t> layer;
 			size_t layerSize = q.size();
 			for (size_t i = 0; i < layerSize; ++i)
 			{
 				size_t curr = q.front();
 				q.pop();
-				layer.push_back(SystemCore[curr].get());
+				layer.push_back(curr);
 				for (size_t next : neighbours[curr])
 					if (--inDegree[next] == 0) q.push(next);
 			}
-			_executionLayers.push_back(std::move(layer));
+			provisionalLayers.push_back(std::move(layer));
 			processed += layerSize;
+		}
+
+		// Split each layer so that no sublayer has two systems writing the same component
+		for (auto& provisionalLayer : provisionalLayers)
+		{
+			std::sort(provisionalLayer.begin(), provisionalLayer.end());
+
+			std::vector<std::vector<size_t>> sublayers;
+			std::vector<std::set<std::type_index>> sublayerWriteSets;
+
+			for (size_t systemIndex : provisionalLayer)
+			{
+				const auto writes = SystemCore[systemIndex]->getWriteComponents();
+
+				size_t targetSublayer = sublayers.size();
+				for (size_t s = 0; s < sublayers.size(); ++s)
+				{
+					bool conflict = false;
+					for (auto& writeInst : writes)
+					{
+						if (sublayerWriteSets[s].count(writeInst))
+						{
+							conflict = true;
+							break;
+						}
+					}
+					if (!conflict)
+					{
+						targetSublayer = s;
+						break;
+					}
+				}
+
+				if (targetSublayer == sublayers.size())
+				{
+					sublayers.emplace_back();
+					sublayerWriteSets.emplace_back();
+				}
+				sublayers[targetSublayer].push_back(systemIndex);
+				for (auto& writeInst : writes) sublayerWriteSets[targetSublayer].insert(writeInst);
+			}
+
+			for (auto& sublayer : sublayers)
+			{
+				std::vector<ISystemCore*> finalLayer;
+				finalLayer.reserve(sublayer.size());
+				for (size_t idx : sublayer) finalLayer.push_back(SystemCore[idx].get());
+				_executionLayers.push_back(std::move(finalLayer));
+			}
 		}
 
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
