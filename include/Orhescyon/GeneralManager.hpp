@@ -138,7 +138,7 @@ public:
 			return false;
 		}
 #endif
-		return _componentManager.getComponent<TComponent>(entity) != nullptr;
+		return _componentManager.hasComponent<TComponent>(entity);
 	}
 
 	// Removes a component and auto-unsubscribes from systems whose requirements no longer match.

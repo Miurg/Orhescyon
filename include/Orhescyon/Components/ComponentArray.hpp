@@ -38,6 +38,12 @@ public:
 		return ptr;
 	}
 
+	bool hasComponent(Entity entity) const noexcept
+	{
+		if (entity >= _sparse.size()) return false;
+		return _sparse[entity] != INVALID_INDEX;
+	}
+
 	TComponent* getComponent(Entity entity)
 	{
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)

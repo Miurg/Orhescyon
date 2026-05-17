@@ -40,6 +40,14 @@ public:
 	}
 
 	template <typename TComponent>
+	bool hasComponent(Entity entity)
+	{
+		auto it = _componentArrays.find(std::type_index(typeid(TComponent)));
+		if (it == _componentArrays.end()) return false;
+		return std::static_pointer_cast<ComponentArray<TComponent>>(it->second)->hasComponent(entity);
+	}
+
+	template <typename TComponent>
 	TComponent* getComponent(Entity entity)
 	{
 		return getComponentArray<TComponent>().getComponent(entity);
