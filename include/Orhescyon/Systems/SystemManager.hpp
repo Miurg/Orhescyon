@@ -107,6 +107,14 @@ public:
 		subscribeInternal(entity, typeid(TSystem), gm);
 	}
 
+	template <typename TSystem>
+	bool isSubscribed(Entity entity) const
+	{
+		auto it = SystemToEntities.find(std::type_index(typeid(TSystem)));
+		if (it == SystemToEntities.end()) return false;
+		return it->second.contains(entity);
+	}
+
 	void unsubscribe(Entity entity, std::type_index systemType, GeneralManager& gm)
 	{
 		ISystemCore* system = nullptr;

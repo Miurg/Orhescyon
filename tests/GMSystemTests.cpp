@@ -114,3 +114,81 @@ TEST(GeneralManager, RemoveRequiredComponentAutoUnsubscribes)
 
     EXPECT_NO_THROW(gm.removeComponent<Position>(e));
 }
+
+TEST(GeneralManager, IsSubscribedToReturnsFalseBeforeSubscribe)
+{
+    GeneralManager gm;
+    gm.registerSystem<MovementSystem>();
+
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 0.0f, 0.0f);
+    gm.addComponent<Velocity>(e, 1.0f, 0.0f);
+
+    EXPECT_FALSE(gm.isSubscribedTo<MovementSystem>(e));
+}
+
+TEST(GeneralManager, IsSubscribedToReturnsTrueAfterSubscribe)
+{
+    GeneralManager gm;
+    gm.registerSystem<MovementSystem>();
+
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 0.0f, 0.0f);
+    gm.addComponent<Velocity>(e, 1.0f, 0.0f);
+    gm.subscribeEntity<MovementSystem>(e);
+
+    EXPECT_TRUE(gm.isSubscribedTo<MovementSystem>(e));
+}
+
+TEST(GeneralManager, IsSubscribedToReturnsFalseAfterUnsubscribe)
+{
+    GeneralManager gm;
+    gm.registerSystem<MovementSystem>();
+
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 0.0f, 0.0f);
+    gm.addComponent<Velocity>(e, 1.0f, 0.0f);
+    gm.subscribeEntity<MovementSystem>(e);
+    gm.unsubscribeEntity<MovementSystem>(e);
+
+    EXPECT_FALSE(gm.isSubscribedTo<MovementSystem>(e));
+}
+
+TEST(GeneralManager, IsSubscribedToReturnsFalseAfterAutoUnsubscribe)
+{
+    GeneralManager gm;
+    gm.registerSystem<MovementSystem>();
+
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 0.0f, 0.0f);
+    gm.addComponent<Velocity>(e, 1.0f, 0.0f);
+    gm.subscribeEntity<MovementSystem>(e);
+    gm.removeComponent<Position>(e);
+
+    EXPECT_FALSE(gm.isSubscribedTo<MovementSystem>(e));
+}
+
+TEST(GeneralManager, IsSubscribedToOnInactiveEntityReturnsFalse)
+{
+    GeneralManager gm;
+    gm.registerSystem<MovementSystem>();
+
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 0.0f, 0.0f);
+    gm.addComponent<Velocity>(e, 1.0f, 0.0f);
+    gm.subscribeEntity<MovementSystem>(e);
+    gm.destroyEntity(e);
+
+    EXPECT_FALSE(gm.isSubscribedTo<MovementSystem>(e));
+}
+
+TEST(GeneralManager, IsSubscribedToUnregisteredSystemReturnsFalse)
+{
+    GeneralManager gm;
+
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 0.0f, 0.0f);
+    gm.addComponent<Velocity>(e, 1.0f, 0.0f);
+
+    EXPECT_FALSE(gm.isSubscribedTo<MovementSystem>(e));
+}

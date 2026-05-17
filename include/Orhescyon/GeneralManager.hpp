@@ -127,6 +127,20 @@ public:
 		return component;
 	}
 
+	// Returns true if the entity has the component.
+	template <typename TComponent>
+	bool hasComponent(Entity entity)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::HasComponent on inactive entity " << entity << std::endl;
+			return false;
+		}
+#endif
+		return _componentManager.getComponent<TComponent>(entity) != nullptr;
+	}
+
 	// Removes a component and auto-unsubscribes from systems whose requirements no longer match.
 	template <typename TComponent>
 	void removeComponent(Entity entity)
@@ -234,6 +248,30 @@ public:
 #endif
 		SystemManager* sm = findSystemManager(it->second);
 		sm->subscribe<TSystem>(entity, *this);
+	}
+
+	// Returns true if the entity is subscribed to the given system.
+	template <typename TSystem>
+	bool isSubscribedTo(Entity entity)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::IsSubscribedTo on inactive entity " << entity << std::endl;
+			return false;
+		}
+#endif
+		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
+#ifdef ORHESCYON_HIGH_CHECK
+		if (it == _systemTypeToManager.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::IsSubscribedTo: system " << typeid(TSystem).name()
+			          << " not registered in any SystemManager" << std::endl;
+			return false;
+		}
+#endif
+		SystemManager* sm = findSystemManager(it->second);
+		return sm->isSubscribed<TSystem>(entity);
 	}
 
 	// Unsubscribes an entity from a system.

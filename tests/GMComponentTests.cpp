@@ -58,3 +58,40 @@ TEST(GeneralManager, DestroyEntityClearsComponents)
     EXPECT_EQ(gm.getComponent<Position>(e), nullptr);
     EXPECT_EQ(gm.getComponent<Health>(e), nullptr);
 }
+
+TEST(GeneralManager, HasComponentReturnsFalseWhenMissing)
+{
+    GeneralManager gm;
+    Entity e = gm.createEntity();
+
+    EXPECT_FALSE(gm.hasComponent<Position>(e));
+}
+
+TEST(GeneralManager, HasComponentReturnsTrueAfterAdd)
+{
+    GeneralManager gm;
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 1.0f, 2.0f);
+
+    EXPECT_TRUE(gm.hasComponent<Position>(e));
+}
+
+TEST(GeneralManager, HasComponentReturnsFalseAfterRemove)
+{
+    GeneralManager gm;
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 1.0f, 2.0f);
+    gm.removeComponent<Position>(e);
+
+    EXPECT_FALSE(gm.hasComponent<Position>(e));
+}
+
+TEST(GeneralManager, HasComponentOnInactiveEntityReturnsFalse)
+{
+    GeneralManager gm;
+    Entity e = gm.createEntity();
+    gm.addComponent<Position>(e, 1.0f, 2.0f);
+    gm.destroyEntity(e);
+
+    EXPECT_FALSE(gm.hasComponent<Position>(e));
+}
