@@ -20,3 +20,39 @@ if(ORHESCYON_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS Orhescyon
+    EXPORT OrhescyonTargets
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(EXPORT OrhescyonTargets
+    FILE OrhescyonTargets.cmake
+    NAMESPACE Orhescyon::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OrhescyonConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
+)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
+)
