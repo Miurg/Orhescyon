@@ -38,7 +38,7 @@ public:
 		return ptr;
 	}
 
-	bool hasComponent(Entity entity) const noexcept
+	[[nodiscard]] bool hasComponent(Entity entity) const noexcept
 	{
 		if (entity >= _sparse.size()) return false;
 		return _sparse[entity] != INVALID_INDEX;
@@ -80,7 +80,7 @@ public:
 		_sparse[entity] = INVALID_INDEX;
 	}
 
-	size_t size() const
+	[[nodiscard]] size_t size() const
 	{
 		return _pool.liveCount();
 	}

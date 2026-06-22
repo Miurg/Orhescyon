@@ -74,24 +74,27 @@ public:
 	void onRegistered(GeneralManager& gm) override
 	{
 		// Optional: Override in derived class if needed
+		// TODO: create return variables
 	}
 
 	void onShutdown(GeneralManager& gm) override
 	{
 		// Optional: Override in derived class if needed
+		// TODO: create return variables
 	}
 
 	void onEntitySubscribed(Entity entity, GeneralManager& gm) override
 	{
 		if (!shouldProcessEntity(entity, gm))
 		{
-			return;
+			return; // TODO: create return variables
 		}
 	}
 
 	void onEntityUnsubscribed(Entity entity, GeneralManager& gm) override
 	{
 		// Optional: Override in derived class if needed
+		// TODO: create return variables
 	}
 };
 } // namespace Orhescyon

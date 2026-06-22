@@ -57,7 +57,7 @@ public:
 	{
 		const unsigned maxThreads = std::thread::hardware_concurrency();
 		if (maxThreads <= 1) return 1;
-		return static_cast<std::size_t>(maxThreads - 1);
+		return maxThreads - 1;
 	}
 
 	explicit JobPool(std::size_t threadCount = defaultThreadCount())
@@ -79,7 +79,7 @@ public:
 			if (t.joinable()) t.join();
 	}
 
-	std::size_t threadCount() const noexcept
+	[[nodiscard]] std::size_t threadCount() const noexcept
 	{
 		return _workers.size();
 	}
@@ -177,7 +177,7 @@ public:
 		using std::end;
 		auto first = begin(range);
 		auto last = end(range);
-		using Category = typename std::iterator_traits<decltype(first)>::iterator_category;
+		using Category = std::iterator_traits<decltype(first)>::iterator_category;
 		return parallelForImpl(first, last, std::forward<Func>(func), Category{});
 	}
 

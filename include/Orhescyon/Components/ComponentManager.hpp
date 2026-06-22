@@ -21,7 +21,7 @@ private:
 	ComponentArray<TComponent>& getComponentArray()
 	{
 		auto typeIndex = std::type_index(typeid(TComponent));
-		if (_componentArrays.find(typeIndex) == _componentArrays.end())
+		if (!_componentArrays.contains(typeIndex))
 		{
 			_componentArrays[typeIndex] = std::make_shared<ComponentArray<TComponent>>();
 			_removeCallbacks[typeIndex] = [this](Entity entity)

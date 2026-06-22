@@ -23,7 +23,7 @@ public:
 	{
 #ifdef ORHESCYON_HIGH_CHECK
 		size_t hash = typeid(TContext).hash_code();
-		if (_contexts.find(hash) == _contexts.end())
+		if (!_contexts.contains(hash))
 		{
 			std::cerr << "WARNING::CONTEXT_MANAGER::Context " << typeid(TContext).name()
 			          << " not registered, returning 0" << std::endl;

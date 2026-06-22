@@ -48,8 +48,8 @@ private:
 public:
 	GeneralManager(const GeneralManager&) = delete;
 	GeneralManager& operator=(const GeneralManager&) = delete;
-	GeneralManager(GeneralManager&&) noexcept = default;
-	GeneralManager& operator=(GeneralManager&&) noexcept = default;
+	GeneralManager(GeneralManager&&) noexcept = delete;
+	GeneralManager& operator=(GeneralManager&&) noexcept = delete;
 
 	GeneralManager()
 	{
@@ -178,7 +178,7 @@ public:
 	void registerSystemManager(std::string name)
 	{
 #ifdef ORHESCYON_HIGH_CHECK
-		if (_systemManagers.find(name) != _systemManagers.end())
+		if (_systemManagers.contains(name))
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::RegisterSystemManager duplicate name \"" << name << "\". Ignored."
 			          << std::endl;

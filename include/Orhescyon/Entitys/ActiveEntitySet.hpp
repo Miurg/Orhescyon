@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <limits>
 #include <vector>
 
@@ -14,7 +13,7 @@ class ActiveEntitySet
 public:
 	ActiveEntitySet() = default;
 
-	bool contains(Entity entity) const noexcept
+	[[nodiscard]] bool contains(Entity entity) const noexcept
 	{
 		if (entity >= _sparse.size()) return false;
 		size_t idx = _sparse[entity];
@@ -46,21 +45,21 @@ public:
 		_sparse.clear();
 	}
 
-	size_t size() const noexcept
+	[[nodiscard]] size_t size() const noexcept
 	{
 		return _dense.size();
 	}
 
-	const std::vector<Entity>& dense() const noexcept
+	[[nodiscard]] const std::vector<Entity>& dense() const noexcept
 	{
 		return _dense;
 	}
 
-	auto begin() const noexcept
+	[[nodiscard]] auto begin() const noexcept
 	{
 		return _dense.begin();
 	}
-	auto end() const noexcept
+	[[nodiscard]] auto end() const noexcept
 	{
 		return _dense.end();
 	}

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
+#include <ranges>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
@@ -59,7 +60,7 @@ private:
 		auto& currentSystems = EntityToSystems[entity];
 
 #ifdef ORHESCYON_HIGH_CHECK
-		if (std::find(currentSystems.begin(), currentSystems.end(), systemType) != currentSystems.end())
+		if (std::ranges::find(currentSystems, systemType) != currentSystems.end())
 		{
 			std::cout << "WARNING::SYSTEM_MANAGER::Entity " << entity
 			          << " trying to subscribe to a system that is already subscribed to  " << systemType.name()
@@ -86,9 +87,9 @@ private:
 public:
 	void onShutdown(GeneralManager& gm)
 	{
-		for (auto it = SystemCore.rbegin(); it != SystemCore.rend(); ++it)
+		for (auto& it : std::ranges::reverse_view(SystemCore))
 		{
-			(*it)->onShutdown(gm);
+			it->onShutdown(gm);
 		}
 	}
 
@@ -108,7 +109,7 @@ public:
 	}
 
 	template <typename TSystem>
-	bool isSubscribed(Entity entity) const
+	[[nodiscard]] bool isSubscribed(Entity entity) const
 	{
 		auto it = SystemToEntities.find(std::type_index(typeid(TSystem)));
 		if (it == SystemToEntities.end()) return false;
@@ -119,25 +120,23 @@ public:
 	{
 		ISystemCore* system = nullptr;
 
+		for (auto& sys : SystemCore)
 		{
-			for (auto& sys : SystemCore)
+			if (std::type_index(typeid(*sys)) == systemType)
 			{
-				if (std::type_index(typeid(*sys)) == systemType)
-				{
-					system = sys.get();
-					break;
-				}
+				system = sys.get();
+				break;
 			}
-#ifdef ORHESCYON_HIGH_CHECK
-			if (!system)
-			{
-				std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity
-				          << " trying to unsubscribe from a non-existent system " << systemType.name()
-				          << ". Cant unsubscribe!" << std::endl;
-				return;
-			}
-#endif
 		}
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!system)
+		{
+			std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity
+			          << " trying to unsubscribe from a non-existent system " << systemType.name() << ". Cant unsubscribe!"
+			          << std::endl;
+			return;
+		}
+#endif
 
 		system->onEntityUnsubscribed(entity, gm);
 
@@ -151,7 +150,7 @@ public:
 		if (entityIt != EntityToSystems.end())
 		{
 			auto& systems = entityIt->second;
-			auto systemIt = std::find(systems.begin(), systems.end(), systemType);
+			auto systemIt = std::ranges::find(systems, systemType);
 			if (systemIt != systems.end())
 			{
 				systems.erase(systemIt);
@@ -320,7 +319,7 @@ public:
 		// Split each layer so that no sublayer has two systems writing the same component
 		for (auto& provisionalLayer : provisionalLayers)
 		{
-			std::sort(provisionalLayer.begin(), provisionalLayer.end());
+			std::ranges::sort(provisionalLayer);
 
 			std::vector<std::vector<size_t>> sublayers;
 			std::vector<std::set<std::type_index>> sublayerWriteSets;
@@ -335,7 +334,7 @@ public:
 					bool conflict = false;
 					for (auto& writeInst : writes)
 					{
-						if (sublayerWriteSets[s].count(writeInst))
+						if (sublayerWriteSets[s].contains(writeInst))
 						{
 							conflict = true;
 							break;

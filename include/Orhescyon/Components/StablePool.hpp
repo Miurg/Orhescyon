@@ -156,22 +156,22 @@ public:
 		_blocks.reserve(numBlocks);
 	}
 
-	uint32_t liveCount() const noexcept
+	[[nodiscard]] uint32_t liveCount() const noexcept
 	{
 		return _liveCount;
 	}
 
-	uint32_t capacity() const noexcept
+	[[nodiscard]] uint32_t capacity() const noexcept
 	{
 		return _capacity;
 	}
 
-	uint32_t freeCount() const noexcept
+	[[nodiscard]] uint32_t freeCount() const noexcept
 	{
 		return static_cast<uint32_t>(_freeIndices.size());
 	}
 
-	uint32_t blockCount() const noexcept
+	[[nodiscard]] uint32_t blockCount() const noexcept
 	{
 		return static_cast<uint32_t>(_blocks.size());
 	}

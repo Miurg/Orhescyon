@@ -23,17 +23,17 @@ public:
 	JobGroup(JobGroup&&) noexcept = default;
 	JobGroup& operator=(JobGroup&&) noexcept = default;
 
-	bool empty() const noexcept
+	[[nodiscard]] bool empty() const noexcept
 	{
 		return _futures.empty();
 	}
 
-	std::size_t chunkCount() const noexcept
+	[[nodiscard]] std::size_t chunkCount() const noexcept
 	{
 		return _futures.size();
 	}
 
-	bool valid() const noexcept
+	[[nodiscard]] bool valid() const noexcept
 	{
 		if (_futures.empty()) return false;
 		for (const auto& f : _futures)
