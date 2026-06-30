@@ -21,38 +21,43 @@ if(ORHESCYON_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-include(GNUInstallDirs)
-include(CMakePackageConfigHelpers)
+# Only emit install/export rules when standalone.
+option(ORHESCYON_INSTALL "Generate install/export rules for Orhescyon" "${PROJECT_IS_TOP_LEVEL}")
 
-install(TARGETS Orhescyon
-    EXPORT OrhescyonTargets
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+if(ORHESCYON_INSTALL)
+    include(GNUInstallDirs)
+    include(CMakePackageConfigHelpers)
 
-install(DIRECTORY include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+    install(TARGETS Orhescyon
+        EXPORT OrhescyonTargets
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
 
-install(EXPORT OrhescyonTargets
-    FILE OrhescyonTargets.cmake
-    NAMESPACE Orhescyon::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
-)
+    install(DIRECTORY include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
 
-configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OrhescyonConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfig.cmake"
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
-)
+    install(EXPORT OrhescyonTargets
+        FILE OrhescyonTargets.cmake
+        NAMESPACE Orhescyon::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
+    )
 
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfigVersion.cmake"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OrhescyonConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfig.cmake"
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
+    )
 
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfigVersion.cmake"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
-)
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/OrhescyonConfigVersion.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Orhescyon
+    )
+endif()
