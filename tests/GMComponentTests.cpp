@@ -95,3 +95,19 @@ TEST(GeneralManager, HasComponentOnInactiveEntityReturnsFalse)
 
     EXPECT_FALSE(gm.hasComponent<Position>(e));
 }
+
+TEST(GeneralManager, RecycledSlotHasNoStaleComponents)
+{
+    GeneralManager gm;
+    Entity first = gm.createEntity();
+    gm.addComponent<Position>(first, 1.0f, 2.0f);
+    gm.addComponent<Health>(first, 100);
+    gm.destroyEntity(first);
+
+    Entity second = gm.createEntity();
+    ASSERT_EQ(second.slot, first.slot);
+
+    EXPECT_FALSE(gm.hasComponent<Position>(second));
+    EXPECT_FALSE(gm.hasComponent<Health>(second));
+    EXPECT_EQ(gm.getComponent<Position>(second), nullptr);
+}

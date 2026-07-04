@@ -15,28 +15,29 @@ public:
 
 	[[nodiscard]] bool contains(Entity entity) const noexcept
 	{
-		if (entity >= _sparse.size()) return false;
-		size_t idx = _sparse[entity];
+		if (entity.slot >= _sparse.size()) return false;
+		size_t idx = _sparse[entity.slot];
+		// Full compare — a recycled slot with another generation is a different entity
 		return idx < _dense.size() && _dense[idx] == entity;
 	}
 
 	void insert(Entity entity)
 	{
 		if (contains(entity)) return;
-		if (entity >= _sparse.size()) _sparse.resize(entity + 1, INVALID_INDEX);
-		_sparse[entity] = _dense.size();
+		if (entity.slot >= _sparse.size()) _sparse.resize(entity.slot + 1, INVALID_INDEX);
+		_sparse[entity.slot] = _dense.size();
 		_dense.push_back(entity);
 	}
 
 	void erase(Entity entity)
 	{
 		if (!contains(entity)) return;
-		size_t idx = _sparse[entity];
+		size_t idx = _sparse[entity.slot];
 		Entity last = _dense.back();
 		_dense[idx] = last;
-		_sparse[last] = idx;
+		_sparse[last.slot] = idx;
 		_dense.pop_back();
-		_sparse[entity] = INVALID_INDEX;
+		_sparse[entity.slot] = INVALID_INDEX;
 	}
 
 	void clear() noexcept

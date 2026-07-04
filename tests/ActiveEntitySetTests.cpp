@@ -8,35 +8,53 @@ using namespace Orhescyon;
 TEST(ActiveEntitySet, InsertAndContains)
 {
     ActiveEntitySet set;
-    set.insert(1);
-    set.insert(42);
+    set.insert(Entity{1, 0});
+    set.insert(Entity{42, 0});
 
-    EXPECT_TRUE(set.contains(1));
-    EXPECT_TRUE(set.contains(42));
-    EXPECT_FALSE(set.contains(0));
-    EXPECT_FALSE(set.contains(99));
+    EXPECT_TRUE(set.contains(Entity{1, 0}));
+    EXPECT_TRUE(set.contains(Entity{42, 0}));
+    EXPECT_FALSE(set.contains(Entity{0, 0}));
+    EXPECT_FALSE(set.contains(Entity{99, 0}));
+}
+
+TEST(ActiveEntitySet, GenerationMismatchIsNotContained)
+{
+    ActiveEntitySet set;
+    set.insert(Entity{1, 0});
+
+    EXPECT_FALSE(set.contains(Entity{1, 1}));
+}
+
+TEST(ActiveEntitySet, EraseStaleGenerationIsNoop)
+{
+    ActiveEntitySet set;
+    set.insert(Entity{1, 0});
+    set.erase(Entity{1, 1});
+
+    EXPECT_TRUE(set.contains(Entity{1, 0}));
+    EXPECT_EQ(set.size(), 1u);
 }
 
 TEST(ActiveEntitySet, EraseSwapsWithLast)
 {
     ActiveEntitySet set;
-    set.insert(1);
-    set.insert(2);
-    set.insert(3);
+    set.insert(Entity{1, 0});
+    set.insert(Entity{2, 0});
+    set.insert(Entity{3, 0});
 
-    set.erase(2);
+    set.erase(Entity{2, 0});
 
-    EXPECT_FALSE(set.contains(2));
-    EXPECT_TRUE(set.contains(1));
-    EXPECT_TRUE(set.contains(3));
+    EXPECT_FALSE(set.contains(Entity{2, 0}));
+    EXPECT_TRUE(set.contains(Entity{1, 0}));
+    EXPECT_TRUE(set.contains(Entity{3, 0}));
     EXPECT_EQ(set.size(), 2u);
 }
 
 TEST(ActiveEntitySet, InsertDuplicateIsNoop)
 {
     ActiveEntitySet set;
-    set.insert(5);
-    set.insert(5);
+    set.insert(Entity{5, 0});
+    set.insert(Entity{5, 0});
 
     EXPECT_EQ(set.size(), 1u);
 }
@@ -44,8 +62,8 @@ TEST(ActiveEntitySet, InsertDuplicateIsNoop)
 TEST(ActiveEntitySet, EraseNonexistentIsNoop)
 {
     ActiveEntitySet set;
-    set.insert(1);
-    set.erase(999);
+    set.insert(Entity{1, 0});
+    set.erase(Entity{999, 0});
 
     EXPECT_EQ(set.size(), 1u);
 }
@@ -53,10 +71,10 @@ TEST(ActiveEntitySet, EraseNonexistentIsNoop)
 TEST(ActiveEntitySet, Clear)
 {
     ActiveEntitySet set;
-    set.insert(1);
-    set.insert(2);
+    set.insert(Entity{1, 0});
+    set.insert(Entity{2, 0});
     set.clear();
 
     EXPECT_EQ(set.size(), 0u);
-    EXPECT_FALSE(set.contains(1));
+    EXPECT_FALSE(set.contains(Entity{1, 0}));
 }

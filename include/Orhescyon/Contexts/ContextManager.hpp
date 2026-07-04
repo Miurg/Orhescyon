@@ -2,6 +2,9 @@
 
 #include <typeinfo>
 #include <iostream>
+#include <unordered_map>
+
+#include "../Entitys/Entity.hpp"
 
 namespace Orhescyon
 {
@@ -18,19 +21,20 @@ public:
 		_contexts[typeid(TContext).hash_code()] = entity;
 	}
 
+	// Returns Entity::invalid() for a context that was never registered.
 	template <typename TContext>
 	Entity getContext()
 	{
-#ifdef ORHESCYON_HIGH_CHECK
-		size_t hash = typeid(TContext).hash_code();
-		if (!_contexts.contains(hash))
+		auto it = _contexts.find(typeid(TContext).hash_code());
+		if (it == _contexts.end())
 		{
+#ifdef ORHESCYON_HIGH_CHECK
 			std::cerr << "WARNING::CONTEXT_MANAGER::Context " << typeid(TContext).name()
-			          << " not registered, returning 0" << std::endl;
-			return 0;
-		}
+			          << " not registered, returning invalid entity" << std::endl;
 #endif
-		return _contexts[typeid(TContext).hash_code()];
+			return Entity::invalid();
+		}
+		return it->second;
 	}
 };
 }

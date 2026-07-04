@@ -1,5 +1,6 @@
 #pragma once
 #include "StablePool.hpp"
+#include "../Entitys/Entity.hpp"
 #include <limits>
 #include <vector>
 
@@ -19,14 +20,14 @@ private:
 public:
 	TComponent* addComponent(Entity entity, TComponent&& component)
 	{
-		if (entity >= _sparse.size())
+		if (entity.slot >= _sparse.size())
 		{
-			_sparse.resize(entity * 2 + 1, INVALID_INDEX);
+			_sparse.resize(entity.slot * 2 + 1, INVALID_INDEX);
 		}
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (_sparse[entity] != INVALID_INDEX)
+		if (_sparse[entity.slot] != INVALID_INDEX)
 		{
-			uint32_t index = _sparse[entity];
+			uint32_t index = _sparse[entity.slot];
 			_pool[index] = std::move(component);
 			return _pool.at(index);
 		}
@@ -34,25 +35,25 @@ public:
 
 		auto [newIndex, ptr] = _pool.allocate(std::move(component));
 
-		_sparse[entity] = newIndex;
+		_sparse[entity.slot] = newIndex;
 		return ptr;
 	}
 
 	[[nodiscard]] bool hasComponent(Entity entity) const noexcept
 	{
-		if (entity >= _sparse.size()) return false;
-		return _sparse[entity] != INVALID_INDEX;
+		if (entity.slot >= _sparse.size()) return false;
+		return _sparse[entity.slot] != INVALID_INDEX;
 	}
 
 	TComponent* getComponent(Entity entity)
 	{
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (entity >= _sparse.size()) [[unlikely]]
+		if (entity.slot >= _sparse.size()) [[unlikely]]
 		{
 			return nullptr;
 		}
 #endif
-		uint32_t index = _sparse[entity];
+		uint32_t index = _sparse[entity.slot];
 
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (index == INVALID_INDEX) [[unlikely]]
@@ -67,17 +68,17 @@ public:
 	void removeComponent(Entity entity)
 	{
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (entity >= _sparse.size()) [[unlikely]]
+		if (entity.slot >= _sparse.size()) [[unlikely]]
 			return;
 #endif
-		uint32_t indexToRemove = _sparse[entity];
+		uint32_t indexToRemove = _sparse[entity.slot];
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (indexToRemove == INVALID_INDEX) [[unlikely]]
 			return;
 #endif
 		_pool.deallocate(indexToRemove);
 
-		_sparse[entity] = INVALID_INDEX;
+		_sparse[entity.slot] = INVALID_INDEX;
 	}
 
 	[[nodiscard]] size_t size() const

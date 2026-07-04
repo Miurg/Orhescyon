@@ -17,7 +17,6 @@
 
 #include "Components/ComponentManager.hpp"
 #include "Entitys/EntityManager.hpp"
-#include "Entitys/ActiveEntitySet.hpp"
 #include "Systems/SystemManager.hpp"
 #include "Contexts/ContextManager.hpp"
 #include "Jobs/DefaultJobSystem.hpp"
@@ -99,15 +98,23 @@ public:
 		return entity;
 	}
 
-	// Removes components first, then unsubscribes from all systems, then deactivates.
+	// Unsubscribes from systems, removes components, then frees the slot.
 	void destroyEntity(Entity entity)
 	{
-		_entityManager.destroyEntity(entity);
-		_componentManager.removeEntity(entity);
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::DestroyEntity on inactive entity " << entity << std::endl;
+			return;
+		}
+#endif
+
 		for (auto& [name, sm] : _systemManagers)
 		{
 			sm.unsubscribeFromAll(entity, *this);
 		}
+		_componentManager.removeEntity(entity);
+		_entityManager.destroyEntity(entity);
 	}
 
 	// Adds a component to the entity. Returns pointer to it or nullptr if inactive.
@@ -318,9 +325,16 @@ public:
 		update("default");
 	}
 
-	const ActiveEntitySet& getActiveEntities() const noexcept
+	// Calls func(Entity) for every live entity in ascending slot order.
+	template <typename TFunc>
+	void forEachActiveEntity(TFunc&& func) const
 	{
-		return _entityManager.getActiveEntities();
+		_entityManager.forEachActiveEntity(std::forward<TFunc>(func));
+	}
+
+	[[nodiscard]] uint32_t activeEntityCount() const noexcept
+	{
+		return _entityManager.activeEntityCount();
 	}
 
 	bool isActive(Entity entity) const noexcept

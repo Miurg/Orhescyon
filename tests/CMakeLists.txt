@@ -17,6 +17,7 @@ add_executable(orhescyon-tests
         ComponentArrayTests.cpp
         ComponentManagerTests.cpp
         GMEntitiesTests.cpp
+        EntityManagerTests.cpp
         GMComponentTests.cpp
         GMSystemTests.cpp
         SystemSequenceTests.cpp

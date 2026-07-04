@@ -22,7 +22,7 @@ struct Name
 TEST(ComponentManager, AddAndGetComponent) 
 {
 	ComponentManager cm;
-	Entity e1 = 1;
+	Entity e1{1, 0};
 
 	Position* p = cm.addComponent<Position>(e1, Position{ 1.0f, 2.0f });
 	ASSERT_NE(p, nullptr);
@@ -36,8 +36,8 @@ TEST(ComponentManager, AddAndGetComponent)
 TEST(ComponentManager, RemoveEntityClearsAllItsComponents) 
 {
 	ComponentManager cm;
-	Entity e1 = 1;
-	Entity e2 = 2;
+	Entity e1{1, 0};
+	Entity e2{2, 0};
 
 	cm.addComponent<Position>(e1, Position{ 1.0f, 2.0f });
 	cm.addComponent<Health>(e1, Health{ 100 });
@@ -58,8 +58,8 @@ TEST(ComponentManager, RemoveEntityClearsAllItsComponents)
 TEST(ComponentManager, GetAllComponentsReturnsCorrectArray) 
 {
 	ComponentManager cm;
-	Entity e1 = 1;
-	Entity e2 = 2;
+	Entity e1{1, 0};
+	Entity e2{2, 0};
 
 	cm.addComponent<Position>(e1, Position{ 1.0f, 2.0f });
 	cm.addComponent<Position>(e2, Position{ 3.0f, 4.0f });
@@ -76,7 +76,7 @@ TEST(ComponentManager, GetAllComponentsReturnsCorrectArray)
 TEST(ComponentManager, PerfectForwardingArguments) 
 {
 	ComponentManager cm;
-	Entity e1 = 1;
+	Entity e1{1, 0};
 
 	Name* n = cm.addComponent<Name>(e1, "TestEntity", 42);
 
@@ -88,7 +88,7 @@ TEST(ComponentManager, PerfectForwardingArguments)
 TEST(ComponentManager, LazyInitializationDoesNotThrow) 
 {
 	ComponentManager cm;
-	Entity e1 = 1;
+	Entity e1{1, 0};
 
 	EXPECT_EQ(cm.getComponent<Position>(e1), nullptr);
 
@@ -102,7 +102,7 @@ TEST(ComponentManager, LazyInitializationDoesNotThrow)
 TEST(ComponentManager, TypeIsolation) 
 {
 	ComponentManager cm;
-	Entity e1 = 1;
+	Entity e1{1, 0};
 
 	cm.addComponent<Position>(e1, Position{ 1.0f, 2.0f });
 
