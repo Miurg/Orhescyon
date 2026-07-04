@@ -13,6 +13,7 @@ add_executable(orhescyon-tests
         GMContextTests.cpp
         StablePoolTests.cpp
         ActiveEntitySetTests.cpp
+        SlotBitmapTests.cpp
         ComponentArrayTests.cpp
         ComponentManagerTests.cpp
         GMEntitiesTests.cpp
