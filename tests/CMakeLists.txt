@@ -14,7 +14,8 @@ add_executable(orhescyon-tests
         StablePoolTests.cpp
         ActiveEntitySetTests.cpp
         SlotBitmapTests.cpp
-        ComponentArrayTests.cpp
+        ComponentColumnTests.cpp
+        SparseComponentStorageTests.cpp
         ComponentManagerTests.cpp
         GMEntitiesTests.cpp
         EntityManagerTests.cpp

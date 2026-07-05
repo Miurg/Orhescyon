@@ -181,6 +181,13 @@ public:
 		return _componentManager.getComponent<TComponent>(entity);
 	}
 
+	// Storage footprint of one component type — the data for choosing its StoragePolicy.
+	template <typename TComponent>
+	[[nodiscard]] StorageStatistics storageStatistics()
+	{
+		return _componentManager.getStorage<TComponent>().statistics();
+	}
+
 	// Creates an empty SystemManager with the given name. Duplicate names warn+skip under HIGH_CHECK.
 	void registerSystemManager(std::string name)
 	{

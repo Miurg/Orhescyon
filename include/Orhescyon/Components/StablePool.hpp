@@ -66,11 +66,10 @@ public:
 	~StablePool()
 	{
 		// Note: We don't track which slots are alive, so we don't call destructors.
-		// For non-trivial types ComponentArray is responsible for clearing before destruction.
+		// The owning storage destroys live non-trivial objects before the pool dies.
 	}
 
 	// Allocates a slot and returns {index, pointer}.
-	// Reuses freed slots via move-assign; new slots use placement new.
 	std::pair<uint32_t, T*> allocate(T&& value)
 	{
 		uint32_t index;
@@ -79,7 +78,7 @@ public:
 		{
 			index = _freeIndices.back();
 			_freeIndices.pop_back();
-			(*this)[index] = std::move(value);
+			new (_blocks[index >> BLOCK_SHIFT]->ptr(index & BLOCK_MASK)) T(std::move(value));
 		}
 		else
 		{
@@ -95,7 +94,8 @@ public:
 		return {index, &(*this)[index]};
 	}
 
-	// Marks a slot as free for reuse. Does NOT call the destructor.
+	// Marks a slot as free for reuse. Does NOT call the destructor -
+	// the caller destroys non-trivial objects before deallocating.
 	void deallocate(uint32_t index)
 	{
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)

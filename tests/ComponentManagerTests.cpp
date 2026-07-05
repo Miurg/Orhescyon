@@ -55,7 +55,7 @@ TEST(ComponentManager, RemoveEntityClearsAllItsComponents)
 	EXPECT_FLOAT_EQ(p2->x, 3.0f);
 }
 
-TEST(ComponentManager, GetAllComponentsReturnsCorrectArray) 
+TEST(ComponentManager, GetStorageReturnsCorrectStorage)
 {
 	ComponentManager cm;
 	Entity e1{1, 0};
@@ -64,10 +64,10 @@ TEST(ComponentManager, GetAllComponentsReturnsCorrectArray)
 	cm.addComponent<Position>(e1, Position{ 1.0f, 2.0f });
 	cm.addComponent<Position>(e2, Position{ 3.0f, 4.0f });
 
-	ComponentArray<Position>& positions = cm.getAllComponents<Position>();
+	auto& positions = cm.getStorage<Position>();
 	EXPECT_EQ(positions.size(), 2u);
 
-	// Check we can retrieve components from the returned array
+	// Check we can retrieve components from the returned storage
 	Position* p1 = positions.getComponent(e1);
 	ASSERT_NE(p1, nullptr);
 	EXPECT_FLOAT_EQ(p1->x, 1.0f);
@@ -94,12 +94,12 @@ TEST(ComponentManager, LazyInitializationDoesNotThrow)
 
 	EXPECT_NO_THROW(cm.removeComponent<Position>(e1));
 
-	// Getting the array should return an empty array
-	ComponentArray<Position>& positions = cm.getAllComponents<Position>();
+	// Getting the storage should return an empty storage
+	auto& positions = cm.getStorage<Position>();
 	EXPECT_EQ(positions.size(), 0u);
 }
 
-TEST(ComponentManager, TypeIsolation) 
+TEST(ComponentManager, TypeIsolation)
 {
 	ComponentManager cm;
 	Entity e1{1, 0};
@@ -108,4 +108,43 @@ TEST(ComponentManager, TypeIsolation)
 
 	// Adding Position should not mysteriously add Health
 	EXPECT_EQ(cm.getComponent<Health>(e1), nullptr);
+}
+
+struct RareSparseComponent
+{
+	static constexpr auto orhescyonStoragePolicy = StoragePolicy::Sparse;
+	int payload;
+};
+
+struct ForeignSparseComponent
+{
+	int payload;
+};
+
+// Foreign types opt into Sparse via trait specialization instead of the in-type marker
+template <>
+struct Orhescyon::ComponentStorageTraits<ForeignSparseComponent>
+{
+	static constexpr Orhescyon::StoragePolicy policy = Orhescyon::StoragePolicy::Sparse;
+	static constexpr uint32_t blockSize = 256;
+};
+
+TEST(ComponentManager, StoragePolicyDispatch)
+{
+	static_assert(std::is_same_v<ComponentManager::StorageFor<Position>, ComponentColumn<Position, 4096>>);
+	static_assert(std::is_same_v<ComponentManager::StorageFor<RareSparseComponent>,
+	                             SparseComponentStorage<RareSparseComponent, 4096>>);
+	static_assert(std::is_same_v<ComponentManager::StorageFor<ForeignSparseComponent>,
+	                             SparseComponentStorage<ForeignSparseComponent, 256>>);
+
+	ComponentManager cm;
+	Entity e1{1, 0};
+
+	RareSparseComponent* rare = cm.addComponent<RareSparseComponent>(e1, 7);
+	ASSERT_NE(rare, nullptr);
+	EXPECT_EQ(rare->payload, 7);
+	EXPECT_TRUE(cm.hasComponent<RareSparseComponent>(e1));
+
+	cm.removeEntity(e1);
+	EXPECT_FALSE(cm.hasComponent<RareSparseComponent>(e1));
 }

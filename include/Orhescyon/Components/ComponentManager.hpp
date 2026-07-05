@@ -1,68 +1,79 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
 
-#include "../Entitys/EntityManager.hpp"
-#include "ComponentArray.hpp"
+#include "../Entitys/Entity.hpp"
+#include "ComponentColumn.hpp"
+#include "ComponentStorageTraits.hpp"
+#include "SparseComponentStorage.hpp"
 
 namespace Orhescyon
 {
-// Type-erased component storage. Each component type gets a ComponentArray.
-// removeEntity() uses registered callbacks to erase from all arrays without knowing concrete types.
+// Type-erased registry of component storages. 
+// ComponentColumn by default,
+// SparseComponentStorage as the opt-in for big rare components.
 class ComponentManager
 {
+public:
+	template <typename TComponent>
+	using StorageFor =
+	    std::conditional_t<ComponentStorageTraits<TComponent>::policy == StoragePolicy::Column,
+	                       ComponentColumn<TComponent, ComponentStorageTraits<TComponent>::blockSize>,
+	                       SparseComponentStorage<TComponent, ComponentStorageTraits<TComponent>::blockSize>>;
+
 private:
-	std::unordered_map<std::type_index, std::shared_ptr<void>> _componentArrays;
+	std::unordered_map<std::type_index, std::shared_ptr<void>> _componentStorages;
 	std::unordered_map<std::type_index, std::function<void(Entity)>> _removeCallbacks;
 
 	template <typename TComponent>
-	ComponentArray<TComponent>& getComponentArray()
+	StorageFor<TComponent>& getOrCreateStorage()
 	{
 		auto typeIndex = std::type_index(typeid(TComponent));
-		if (!_componentArrays.contains(typeIndex))
+		if (!_componentStorages.contains(typeIndex))
 		{
-			_componentArrays[typeIndex] = std::make_shared<ComponentArray<TComponent>>();
+			_componentStorages[typeIndex] = std::make_shared<StorageFor<TComponent>>();
 			_removeCallbacks[typeIndex] = [this](Entity entity)
 			{
-				getComponentArray<TComponent>().removeComponent(entity);
+				getOrCreateStorage<TComponent>().removeComponent(entity);
 			};
 		}
-		return *std::static_pointer_cast<ComponentArray<TComponent>>(_componentArrays[typeIndex]);
+		return *std::static_pointer_cast<StorageFor<TComponent>>(_componentStorages[typeIndex]);
 	}
 
 public:
 	template <typename TComponent, typename... Args>
 	TComponent* addComponent(Entity entity, Args&&... args)
 	{
-		return getComponentArray<TComponent>().addComponent(entity, TComponent{std::forward<Args>(args)...});
+		return getOrCreateStorage<TComponent>().addComponent(entity, TComponent{std::forward<Args>(args)...});
 	}
 
 	template <typename TComponent>
 	bool hasComponent(Entity entity)
 	{
-		auto it = _componentArrays.find(std::type_index(typeid(TComponent)));
-		if (it == _componentArrays.end()) return false;
-		return std::static_pointer_cast<ComponentArray<TComponent>>(it->second)->hasComponent(entity);
+		auto it = _componentStorages.find(std::type_index(typeid(TComponent)));
+		if (it == _componentStorages.end()) return false;
+		return std::static_pointer_cast<StorageFor<TComponent>>(it->second)->hasComponent(entity);
 	}
 
 	template <typename TComponent>
 	TComponent* getComponent(Entity entity)
 	{
-		return getComponentArray<TComponent>().getComponent(entity);
+		return getOrCreateStorage<TComponent>().getComponent(entity);
 	}
 
 	template <typename TComponent>
 	void removeComponent(Entity entity)
 	{
-		getComponentArray<TComponent>().removeComponent(entity);
+		getOrCreateStorage<TComponent>().removeComponent(entity);
 	}
 
 	template <typename TComponent>
-	ComponentArray<TComponent>& getAllComponents()
+	StorageFor<TComponent>& getStorage()
 	{
-		return getComponentArray<TComponent>();
+		return getOrCreateStorage<TComponent>();
 	}
 
 	void removeEntity(Entity entity)

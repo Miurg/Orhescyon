@@ -34,10 +34,13 @@ public:
 		return {slot, _generations[slot]};
 	}
 
-	// Stale or double destroys are rejected
+	// Stale or double destroys are rejected under check builds
 	void destroyEntity(Entity entity)
 	{
-		if (!isActive(entity)) return;
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
+		if (!isActive(entity)) [[unlikely]]
+			return;
+#endif
 
 		++_generations[entity.slot];
 		_aliveSlots.clear(entity.slot);

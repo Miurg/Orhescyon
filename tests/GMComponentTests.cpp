@@ -111,3 +111,45 @@ TEST(GeneralManager, RecycledSlotHasNoStaleComponents)
     EXPECT_FALSE(gm.hasComponent<Health>(second));
     EXPECT_EQ(gm.getComponent<Position>(second), nullptr);
 }
+
+namespace
+{
+struct TrackedResource
+{
+    static inline int aliveCount = 0;
+    int value = 0;
+
+    explicit TrackedResource(int v) : value(v) { ++aliveCount; }
+    TrackedResource(TrackedResource&& other) noexcept : value(other.value) { ++aliveCount; }
+    TrackedResource& operator=(TrackedResource&& other) noexcept
+    {
+        value = other.value;
+        return *this;
+    }
+    ~TrackedResource() { --aliveCount; }
+};
+} // namespace
+
+TEST(GeneralManager, DestroyEntityDestroysComponents)
+{
+    TrackedResource::aliveCount = 0;
+    GeneralManager gm;
+    Entity e = gm.createEntity();
+    gm.addComponent<TrackedResource>(e, 5);
+    EXPECT_EQ(TrackedResource::aliveCount, 1);
+
+    gm.destroyEntity(e);
+    EXPECT_EQ(TrackedResource::aliveCount, 0);
+}
+
+TEST(GeneralManager, ManagerDestructionDestroysComponents)
+{
+    TrackedResource::aliveCount = 0;
+    {
+        GeneralManager gm;
+        Entity e = gm.createEntity();
+        gm.addComponent<TrackedResource>(e, 5);
+        EXPECT_EQ(TrackedResource::aliveCount, 1);
+    }
+    EXPECT_EQ(TrackedResource::aliveCount, 0);
+}
