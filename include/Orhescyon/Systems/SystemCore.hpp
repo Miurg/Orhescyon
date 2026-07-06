@@ -33,6 +33,13 @@ protected:
 		return true;
 	}
 
+	// Iterates this system's subscribers, binding RequiredComponents to func.
+	template <typename TFunc>
+	void forEachSubscribedEntity(GeneralManager& gm, TFunc&& func)
+	{
+		gm.forEachSubscribedEntityWith<Derived, RequiredComponents...>(std::forward<TFunc>(func));
+	}
+
 public:
 	~SystemCore() override = default;
 

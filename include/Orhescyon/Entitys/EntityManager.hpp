@@ -53,6 +53,12 @@ public:
 		return _aliveSlots.test(entity.slot) && _generations[entity.slot] == entity.generation;
 	}
 
+	// Unchecked — view internals rebuild handles from live slots
+	[[nodiscard]] uint32_t generationOfSlot(uint32_t slot) const noexcept
+	{
+		return _generations[slot];
+	}
+
 	// Upper bound of slots ever allocated
 	[[nodiscard]] uint32_t slotCapacity() const noexcept
 	{

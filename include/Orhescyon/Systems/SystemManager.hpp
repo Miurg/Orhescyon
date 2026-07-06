@@ -11,7 +11,7 @@
 #include <set>
 
 #include "ISystemCore.hpp"
-#include "../Entitys/ActiveEntitySet.hpp"
+#include "../Entitys/SlotBitmap.hpp"
 #include "../Jobs/IJobSystem.hpp"
 
 namespace Orhescyon
@@ -23,7 +23,7 @@ class SystemManager
 {
 private:
 	std::vector<std::unique_ptr<ISystemCore>> SystemCore;
-	std::unordered_map<std::type_index, ActiveEntitySet> SystemToEntities;
+	std::unordered_map<std::type_index, SlotBitmap> SystemToEntities;
 	std::unordered_map<Entity, std::vector<std::type_index>> EntityToSystems;
 
 	void subscribeInternal(Entity entity, std::type_index systemType, GeneralManager& gm)
@@ -71,7 +71,7 @@ private:
 
 		system->onEntitySubscribed(entity, gm);
 
-		SystemToEntities[systemType].insert(entity);
+		SystemToEntities[systemType].set(entity.slot);
 		EntityToSystems[entity].push_back(systemType);
 
 		const auto& dependencies = system->getSystemDependencies();
@@ -113,7 +113,14 @@ public:
 	{
 		auto it = SystemToEntities.find(std::type_index(typeid(TSystem)));
 		if (it == SystemToEntities.end()) return false;
-		return it->second.contains(entity);
+		return it->second.test(entity.slot);
+	}
+
+	// Subscription bitmap of a system, or nullptr when nothing ever subscribed to it.
+	[[nodiscard]] const SlotBitmap* subscriptionBitmap(std::type_index systemType) const
+	{
+		auto it = SystemToEntities.find(systemType);
+		return it == SystemToEntities.end() ? nullptr : &it->second;
 	}
 
 	void unsubscribe(Entity entity, std::type_index systemType, GeneralManager& gm)
@@ -143,7 +150,7 @@ public:
 		auto systemIt = SystemToEntities.find(systemType);
 		if (systemIt != SystemToEntities.end())
 		{
-			systemIt->second.erase(entity);
+			systemIt->second.clear(entity.slot);
 		}
 
 		auto entityIt = EntityToSystems.find(entity);
@@ -200,7 +207,7 @@ public:
 
 			if (shouldRemove)
 			{
-				SystemToEntities[systemType].erase(entity);
+				SystemToEntities[systemType].clear(entity.slot);
 				it = entitySystems.erase(it);
 			}
 			else

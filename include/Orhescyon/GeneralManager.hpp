@@ -20,6 +20,7 @@
 #include "Systems/SystemManager.hpp"
 #include "Contexts/ContextManager.hpp"
 #include "Jobs/DefaultJobSystem.hpp"
+#include "Views/ComponentView.hpp"
 
 namespace Orhescyon
 {
@@ -262,6 +263,28 @@ public:
 #endif
 		SystemManager* sm = findSystemManager(it->second);
 		sm->subscribe<TSystem>(entity, *this);
+	}
+
+	// Iterates entities subscribed to TSystem that also hold all TComponents.
+	// Structural changes are forbidden inside func.
+	template <typename TSystem, typename... TComponents, typename TFunc>
+	void forEachSubscribedEntityWith(TFunc&& func)
+	{
+		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
+#ifdef ORHESCYON_HIGH_CHECK
+		if (it == _systemTypeToManager.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::ForEachSubscribedEntityWith: system " << typeid(TSystem).name()
+			          << " not registered in any SystemManager" << std::endl;
+			return;
+		}
+#endif
+		SystemManager* sm = findSystemManager(it->second);
+		const SlotBitmap* subscriptionBits = sm->subscriptionBitmap(typeid(TSystem));
+		if (!subscriptionBits) return;
+
+		forEachSubscribedEntityJoin<TComponents...>(*subscriptionBits, _entityManager, _componentManager,
+		                                            std::forward<TFunc>(func));
 	}
 
 	// Returns true if the entity is subscribed to the given system.

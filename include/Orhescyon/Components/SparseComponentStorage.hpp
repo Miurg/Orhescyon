@@ -98,6 +98,9 @@ public:
 		return _pool.at(_sparse[slot]);
 	}
 
+	// Pool indices are not slot-ordered
+	static constexpr bool CONTIGUOUS_DATA = false;
+
 	[[nodiscard]] uint64_t presenceWord(uint32_t wordIndex) const noexcept
 	{
 		return _presence.word(wordIndex);

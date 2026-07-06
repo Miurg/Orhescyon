@@ -12,8 +12,8 @@ FetchContent_MakeAvailable(googletest)
 add_executable(orhescyon-tests
         GMContextTests.cpp
         StablePoolTests.cpp
-        ActiveEntitySetTests.cpp
         SlotBitmapTests.cpp
+        ComponentViewTests.cpp
         ComponentColumnTests.cpp
         SparseComponentStorageTests.cpp
         ComponentManagerTests.cpp

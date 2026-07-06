@@ -170,6 +170,16 @@ public:
 		}
 	}
 
+	// Enables the dense-run fast path in views
+	static constexpr bool CONTIGUOUS_DATA = STORES_DATA;
+
+	// Unchecked — only valid when the whole presence word is set; a word never straddles blocks
+	[[nodiscard]] TComponent* componentRunPointer(uint32_t wordIndex) noexcept
+	{
+		const uint32_t slot = wordIndex << 6;
+		return _blocks[slot >> BLOCK_SHIFT]->pointerTo(slot & BLOCK_MASK);
+	}
+
 	[[nodiscard]] uint64_t presenceWord(uint32_t wordIndex) const noexcept
 	{
 		return _presence.word(wordIndex);

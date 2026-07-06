@@ -3,7 +3,7 @@
 #include <string_view>
 #include <vector>
 #include <typeindex>
-#include "../Entitys/ActiveEntitySet.hpp"
+#include "../Entitys/Entity.hpp"
 
 namespace Orhescyon
 {
