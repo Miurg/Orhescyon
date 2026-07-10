@@ -11,6 +11,7 @@
 #include <set>
 
 #include "ISystemCore.hpp"
+#include "SystemSchedulingMetadata.hpp"
 #include "../Entitys/SlotBitmap.hpp"
 #include "../Jobs/IJobSystem.hpp"
 
@@ -18,13 +19,21 @@ namespace Orhescyon
 {
 class GeneralManager;
 // Owns all systems and tracks bidirectional entity↔system subscriptions.
-// subscribe() recursively resolves system dependencies.
+// Scheduling metadata comes from SystemRegistration chains and resolves at update.
 class SystemManager
 {
 private:
 	std::vector<std::unique_ptr<ISystemCore>> SystemCore;
 	std::unordered_map<std::type_index, SlotBitmap> SystemToEntities;
 	std::unordered_map<Entity, std::vector<std::type_index>> EntityToSystems;
+	std::unordered_map<std::type_index, SystemSchedulingMetadata> _schedulingMetadata;
+
+	const SystemSchedulingMetadata& schedulingMetadataOf(std::type_index systemType) const
+	{
+		static const SystemSchedulingMetadata emptyMetadata;
+		auto it = _schedulingMetadata.find(systemType);
+		return it == _schedulingMetadata.end() ? emptyMetadata : it->second;
+	}
 
 	void subscribeInternal(Entity entity, std::type_index systemType, GeneralManager& gm)
 	{
@@ -73,12 +82,6 @@ private:
 
 		SystemToEntities[systemType].set(entity.slot);
 		EntityToSystems[entity].push_back(systemType);
-
-		const auto& dependencies = system->getSystemDependencies();
-		for (const auto& depType : dependencies)
-		{
-			subscribeInternal(entity, depType, gm);
-		}
 	}
 
 	bool _executionOrderDirty = true;
@@ -121,6 +124,16 @@ public:
 	{
 		auto it = SystemToEntities.find(systemType);
 		return it == SystemToEntities.end() ? nullptr : &it->second;
+	}
+
+	SystemSchedulingMetadata& schedulingMetadataFor(std::type_index systemType)
+	{
+		return _schedulingMetadata[systemType];
+	}
+
+	void markExecutionOrderDirty() noexcept
+	{
+		_executionOrderDirty = true;
 	}
 
 	void unsubscribe(Entity entity, std::type_index systemType, GeneralManager& gm)
@@ -240,15 +253,30 @@ public:
 		std::unordered_map<std::type_index, size_t> typeToIndex;
 		for (size_t i = 0; i < systemsSize; ++i) typeToIndex[std::type_index(typeid(*SystemCore[i]))] = i;
 
+#ifdef ORHESCYON_HIGH_CHECK
+		for (const auto& [systemType, systemIndex] : typeToIndex)
+		{
+			const SystemSchedulingMetadata& metadata = schedulingMetadataOf(systemType);
+			if (SystemCore[systemIndex]->requiredComponentCount() > 0 && metadata.readComponents.empty() &&
+			    metadata.writeComponents.empty())
+			{
+				std::cerr << "WARNING::SYSTEM_MANAGER::System " << systemType.name()
+				          << " requires components but registered no reads/writes" << std::endl;
+			}
+		}
+#endif
+
 		for (size_t first = 0; first < systemsSize; ++first)
 		{
-			const auto writesFirst = SystemCore[first]->getWriteComponents();
-			const auto readsFirst = SystemCore[first]->getReadComponents();
+			const SystemSchedulingMetadata& metadataFirst = schedulingMetadataOf(typeid(*SystemCore[first]));
+			const auto& writesFirst = metadataFirst.writeComponents;
+			const auto& readsFirst = metadataFirst.readComponents;
 
 			for (size_t second = first + 1; second < systemsSize; ++second)
 			{
-				const auto writesSecond = SystemCore[second]->getWriteComponents();
-				const auto readsSecond = SystemCore[second]->getReadComponents();
+				const SystemSchedulingMetadata& metadataSecond = schedulingMetadataOf(typeid(*SystemCore[second]));
+				const auto& writesSecond = metadataSecond.writeComponents;
+				const auto& readsSecond = metadataSecond.readComponents;
 
 				// first writes what second reads - first must come before second
 				bool firstBeforeSecond = false;
@@ -288,16 +316,26 @@ public:
 				if (secondBeforeFirst) addEdge(second, first);
 			}
 
-			// Explicit dependencies
-			for (auto& before : SystemCore[first]->getBeforeSystems())
+			// Explicit dependencies; unknown targets are ignored
+			for (const auto& before : metadataFirst.beforeSystems)
 			{
 				auto it = typeToIndex.find(before);
 				if (it != typeToIndex.end()) addEdge(first, it->second);
+#ifdef ORHESCYON_HIGH_CHECK
+				else
+					std::cerr << "WARNING::SYSTEM_MANAGER::before() target " << before.name()
+					          << " is not registered in this manager" << std::endl;
+#endif
 			}
-			for (auto& after : SystemCore[first]->getAfterSystems())
+			for (const auto& after : metadataFirst.afterSystems)
 			{
 				auto it = typeToIndex.find(after);
 				if (it != typeToIndex.end()) addEdge(it->second, first);
+#ifdef ORHESCYON_HIGH_CHECK
+				else
+					std::cerr << "WARNING::SYSTEM_MANAGER::after() target " << after.name()
+					          << " is not registered in this manager" << std::endl;
+#endif
 			}
 		}
 
@@ -333,7 +371,7 @@ public:
 
 			for (size_t systemIndex : provisionalLayer)
 			{
-				const auto writes = SystemCore[systemIndex]->getWriteComponents();
+				const auto& writes = schedulingMetadataOf(typeid(*SystemCore[systemIndex])).writeComponents;
 
 				size_t targetSublayer = sublayers.size();
 				for (size_t s = 0; s < sublayers.size(); ++s)

@@ -1,9 +1,7 @@
 #pragma once
 
-#include <vector>
 #include <iostream>
 
-#include "../Entitys/EntityManager.hpp"
 #include "ISystemCore.hpp"
 #include "../GeneralManager.hpp"
 
@@ -53,29 +51,9 @@ public:
 		return hasAllComponents<RequiredComponents...>(entity, gm, typeid(Derived).name());
 	}
 
-	std::vector<std::type_index> getReadComponents() override
+	[[nodiscard]] size_t requiredComponentCount() const override
 	{
-		return {};
-	}
-
-	std::vector<std::type_index> getWriteComponents() override
-	{
-		return {};
-	}
-
-	std::vector<std::type_index> getBeforeSystems() override
-	{
-		return {};
-	}
-
-	std::vector<std::type_index> getAfterSystems() override
-	{
-		return {};
-	}
-
-	std::vector<std::type_index> getSystemDependencies() override
-	{
-		return {};
+		return sizeof...(RequiredComponents);
 	}
 
 	void onRegistered(GeneralManager& gm) override

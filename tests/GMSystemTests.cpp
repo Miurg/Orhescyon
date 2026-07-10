@@ -48,7 +48,7 @@ public:
 TEST(GeneralManager, RegisterAndUpdateSystem)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     gm.update();
     gm.update();
@@ -59,7 +59,7 @@ TEST(GeneralManager, RegisterAndUpdateSystem)
 TEST(GeneralManager, SubscribeEntityToSystem)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Position>(e, 0.0f, 0.0f);
@@ -71,7 +71,7 @@ TEST(GeneralManager, SubscribeEntityToSystem)
 TEST(GeneralManager, SubscribeWithoutRequiredComponentFails)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
 
@@ -81,7 +81,7 @@ TEST(GeneralManager, SubscribeWithoutRequiredComponentFails)
 TEST(GeneralManager, UnsubscribeEntity)
 {
     GeneralManager gm;
-    gm.registerSystem<HealthSystem>();
+    gm.registerSystem<HealthSystem>().writes<Health>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Health>(e, 50);
@@ -93,7 +93,7 @@ TEST(GeneralManager, UnsubscribeEntity)
 TEST(GeneralManager, DestroyEntityUnsubscribesFromSystems)
 {
     GeneralManager gm;
-    gm.registerSystem<HealthSystem>();
+    gm.registerSystem<HealthSystem>().writes<Health>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Health>(e, 50);
@@ -105,7 +105,7 @@ TEST(GeneralManager, DestroyEntityUnsubscribesFromSystems)
 TEST(GeneralManager, RemoveRequiredComponentAutoUnsubscribes)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Position>(e, 0.0f, 0.0f);
@@ -118,7 +118,7 @@ TEST(GeneralManager, RemoveRequiredComponentAutoUnsubscribes)
 TEST(GeneralManager, IsSubscribedToReturnsFalseBeforeSubscribe)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Position>(e, 0.0f, 0.0f);
@@ -130,7 +130,7 @@ TEST(GeneralManager, IsSubscribedToReturnsFalseBeforeSubscribe)
 TEST(GeneralManager, IsSubscribedToReturnsTrueAfterSubscribe)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Position>(e, 0.0f, 0.0f);
@@ -143,7 +143,7 @@ TEST(GeneralManager, IsSubscribedToReturnsTrueAfterSubscribe)
 TEST(GeneralManager, IsSubscribedToReturnsFalseAfterUnsubscribe)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Position>(e, 0.0f, 0.0f);
@@ -157,7 +157,7 @@ TEST(GeneralManager, IsSubscribedToReturnsFalseAfterUnsubscribe)
 TEST(GeneralManager, IsSubscribedToReturnsFalseAfterAutoUnsubscribe)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Position>(e, 0.0f, 0.0f);
@@ -171,7 +171,7 @@ TEST(GeneralManager, IsSubscribedToReturnsFalseAfterAutoUnsubscribe)
 TEST(GeneralManager, IsSubscribedToOnInactiveEntityReturnsFalse)
 {
     GeneralManager gm;
-    gm.registerSystem<MovementSystem>();
+    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
     Entity e = gm.createEntity();
     gm.addComponent<Position>(e, 0.0f, 0.0f);

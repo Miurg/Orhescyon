@@ -49,7 +49,7 @@ static int pos(int id)
     return -1;
 }
 
-// Systems: independent (no dependencies)
+// Systems record their id in update(); all scheduling is declared at registration.
 class IndA : public SystemCore<IndA>
 {
 public:
@@ -66,84 +66,65 @@ public:
     void update(GeneralManager&) override { record(2); }
 };
 
-// Systems: linear chain  A → B → C  via data dependencies
 class ChainA : public SystemCore<ChainA>
 {
 public:
     void update(GeneralManager&) override { record(10); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class ChainB : public SystemCore<ChainB>
 {
 public:
     void update(GeneralManager&) override { record(11); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
 };
 class ChainC : public SystemCore<ChainC>
 {
 public:
     void update(GeneralManager&) override { record(12); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompB)}; }
 };
 
-// Systems: diamond  A → {B, C} → D
 class DiamondA : public SystemCore<DiamondA>
 {
 public:
     void update(GeneralManager&) override { record(20); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class DiamondB : public SystemCore<DiamondB>
 {
 public:
     void update(GeneralManager&) override { record(21); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
 };
 class DiamondC : public SystemCore<DiamondC>
 {
 public:
     void update(GeneralManager&) override { record(22); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompC)}; }
 };
 class DiamondD : public SystemCore<DiamondD>
 {
 public:
     void update(GeneralManager&) override { record(23); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompB), typeid(CompC)}; }
 };
 
-// Systems: write/read conflict
 class SysWriter : public SystemCore<SysWriter>
 {
 public:
     void update(GeneralManager&) override { record(30); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class SysReader : public SystemCore<SysReader>
 {
 public:
     void update(GeneralManager&) override { record(31); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
 };
 
-// Systems: write/write conflict
 class SysWriterA : public SystemCore<SysWriterA>
 {
 public:
     void update(GeneralManager&) override { record(40); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class SysWriterB : public SystemCore<SysWriterB>
 {
 public:
     void update(GeneralManager&) override { record(41); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 
-// Systems: explicit getBeforeSystems
 class ExplBeforeY : public SystemCore<ExplBeforeY>
 {
 public:
@@ -153,10 +134,8 @@ class ExplBeforeX : public SystemCore<ExplBeforeX>
 {
 public:
     void update(GeneralManager&) override { record(50); }
-    std::vector<std::type_index> getBeforeSystems() override { return {typeid(ExplBeforeY)}; }
 };
 
-// Systems: explicit getAfterSystems
 class ExplAfterX : public SystemCore<ExplAfterX>
 {
 public:
@@ -166,10 +145,8 @@ class ExplAfterY : public SystemCore<ExplAfterY>
 {
 public:
     void update(GeneralManager&) override { record(61); }
-    std::vector<std::type_index> getAfterSystems() override { return {typeid(ExplAfterX)}; }
 };
 
-// Systems: mixed data + explicit dependencies  A → B → C
 class MixedC : public SystemCore<MixedC>
 {
 public:
@@ -179,72 +156,52 @@ class MixedA : public SystemCore<MixedA>
 {
 public:
     void update(GeneralManager&) override { record(70); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class MixedB : public SystemCore<MixedB>
 {
 public:
     void update(GeneralManager&) override { record(71); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getBeforeSystems() override { return {typeid(MixedC)}; }
 };
 
-// Systems: circular explicit dependency  P ↔ Q
 class CycP : public SystemCore<CycP>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getBeforeSystems() override;
 };
 class CycQ : public SystemCore<CycQ>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getBeforeSystems() override;
 };
-std::vector<std::type_index> CycP::getBeforeSystems() { return {typeid(CycQ)}; }
-std::vector<std::type_index> CycQ::getBeforeSystems() { return {typeid(CycP)}; }
 
-// Systems: circular data dependency
 class CycDataA : public SystemCore<CycDataA>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompB)}; }
 };
 class CycDataB : public SystemCore<CycDataB>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
 };
 
-// Systems: circular three  A → B → C → A
 class CycThreeA : public SystemCore<CycThreeA>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getBeforeSystems() override;
 };
 class CycThreeB : public SystemCore<CycThreeB>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getBeforeSystems() override;
 };
 class CycThreeC : public SystemCore<CycThreeC>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getBeforeSystems() override;
 };
-std::vector<std::type_index> CycThreeA::getBeforeSystems() { return {typeid(CycThreeB)}; }
-std::vector<std::type_index> CycThreeB::getBeforeSystems() { return {typeid(CycThreeC)}; }
-std::vector<std::type_index> CycThreeC::getBeforeSystems() { return {typeid(CycThreeA)}; }
 
-// Systems: reference to non-existent system in getBeforeSystems
+// Referenced as a before-target but never registered
 class SysNeverRegistered : public SystemCore<SysNeverRegistered>
 {
 public:
@@ -254,10 +211,8 @@ class SysBeforeGhost : public SystemCore<SysBeforeGhost>
 {
 public:
     void update(GeneralManager&) override { record(90); }
-    std::vector<std::type_index> getBeforeSystems() override { return {typeid(SysNeverRegistered)}; }
 };
 
-// Systems: parallel execution — sleep to verify concurrency
 class SysSleepA : public SystemCore<SysSleepA>
 {
 public:
@@ -277,7 +232,6 @@ public:
     }
 };
 
-// Systems: dependent order verification via shared atomic
 static std::atomic<int> g_sharedValue{0};
 static std::atomic<int> g_observedValue{0};
 
@@ -289,7 +243,6 @@ public:
         g_sharedValue.store(42, std::memory_order_release);
         record(110);
     }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class DepReader : public SystemCore<DepReader>
 {
@@ -299,10 +252,8 @@ public:
         g_observedValue.store(g_sharedValue.load(std::memory_order_acquire));
         record(111);
     }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
 };
 
-// Systems: single-system thread identity check
 class SysThreadCheck : public SystemCore<SysThreadCheck>
 {
 public:
@@ -310,7 +261,6 @@ public:
     void update(GeneralManager&) override { recordedId = std::this_thread::get_id(); }
 };
 
-// Systems: bulk template for counter-based tests
 template <int Id>
 class BulkSys : public SystemCore<BulkSys<Id>>
 {
@@ -319,7 +269,6 @@ public:
     void update(GeneralManager&) override { ++counter; }
 };
 
-// Systems: cache invalidation
 class CacheA : public SystemCore<CacheA>
 {
 public:
@@ -351,9 +300,9 @@ TEST(SystemSequence, LinearChainOrdering)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<ChainA>();
-    gm.registerSystem<ChainB>();
-    gm.registerSystem<ChainC>();
+    gm.registerSystem<ChainA>().writes<CompA>();
+    gm.registerSystem<ChainB>().reads<CompA>().writes<CompB>();
+    gm.registerSystem<ChainC>().reads<CompB>();
     gm.update();
 
     ASSERT_NE(pos(10), -1);
@@ -367,10 +316,10 @@ TEST(SystemSequence, DiamondPatternOrdering)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<DiamondA>();
-    gm.registerSystem<DiamondB>();
-    gm.registerSystem<DiamondC>();
-    gm.registerSystem<DiamondD>();
+    gm.registerSystem<DiamondA>().writes<CompA>();
+    gm.registerSystem<DiamondB>().reads<CompA>().writes<CompB>();
+    gm.registerSystem<DiamondC>().reads<CompA>().writes<CompC>();
+    gm.registerSystem<DiamondD>().reads<CompB, CompC>();
     gm.update();
 
     ASSERT_NE(pos(20), -1);
@@ -387,8 +336,8 @@ TEST(SystemSequence, WriteReadConflict)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<SysWriter>();
-    gm.registerSystem<SysReader>();
+    gm.registerSystem<SysWriter>().writes<CompA>();
+    gm.registerSystem<SysReader>().reads<CompA>();
     gm.update();
 
     ASSERT_NE(pos(30), -1);
@@ -400,8 +349,8 @@ TEST(SystemSequence, WriteWriteConflict)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<SysWriterA>();
-    gm.registerSystem<SysWriterB>();
+    gm.registerSystem<SysWriterA>().writes<CompA>();
+    gm.registerSystem<SysWriterB>().writes<CompA>();
     gm.update();
 
     ASSERT_NE(pos(40), -1);
@@ -413,7 +362,8 @@ TEST(SystemSequence, ExplicitBefore)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<ExplBeforeX>();
+    // Forward reference: the target registers after the declaration
+    gm.registerSystem<ExplBeforeX>().before<ExplBeforeY>();
     gm.registerSystem<ExplBeforeY>();
     gm.update();
 
@@ -427,7 +377,7 @@ TEST(SystemSequence, ExplicitAfter)
     resetLog();
     GeneralManager gm;
     gm.registerSystem<ExplAfterX>();
-    gm.registerSystem<ExplAfterY>();
+    gm.registerSystem<ExplAfterY>().after<ExplAfterX>();
     gm.update();
 
     ASSERT_NE(pos(60), -1);
@@ -439,8 +389,8 @@ TEST(SystemSequence, MixedDependencies)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<MixedA>();
-    gm.registerSystem<MixedB>();
+    gm.registerSystem<MixedA>().writes<CompA>();
+    gm.registerSystem<MixedB>().reads<CompA>().before<MixedC>();
     gm.registerSystem<MixedC>();
     gm.update();
 
@@ -448,31 +398,31 @@ TEST(SystemSequence, MixedDependencies)
     ASSERT_NE(pos(71), -1);
     ASSERT_NE(pos(72), -1);
     EXPECT_LT(pos(70), pos(71)); // A before B (data dep: write/read CompA)
-    EXPECT_LT(pos(71), pos(72)); // B before C (explicit getBeforeSystems)
+    EXPECT_LT(pos(71), pos(72)); // B before C (explicit before)
 }
 
 TEST(SystemSequence, CircularExplicitDependencyThrows)
 {
     GeneralManager gm;
-    gm.registerSystem<CycP>();
-    gm.registerSystem<CycQ>();
+    gm.registerSystem<CycP>().before<CycQ>();
+    gm.registerSystem<CycQ>().before<CycP>();
     EXPECT_THROW(gm.update(), std::runtime_error);
 }
 
 TEST(SystemSequence, CircularDataDependencyThrows)
 {
     GeneralManager gm;
-    gm.registerSystem<CycDataA>();
-    gm.registerSystem<CycDataB>();
+    gm.registerSystem<CycDataA>().writes<CompA>().reads<CompB>();
+    gm.registerSystem<CycDataB>().writes<CompB>().reads<CompA>();
     EXPECT_THROW(gm.update(), std::runtime_error);
 }
 
 TEST(SystemSequence, CircularThreeSystemsThrows)
 {
     GeneralManager gm;
-    gm.registerSystem<CycThreeA>();
-    gm.registerSystem<CycThreeB>();
-    gm.registerSystem<CycThreeC>();
+    gm.registerSystem<CycThreeA>().before<CycThreeB>();
+    gm.registerSystem<CycThreeB>().before<CycThreeC>();
+    gm.registerSystem<CycThreeC>().before<CycThreeA>();
     EXPECT_THROW(gm.update(), std::runtime_error);
 }
 
@@ -480,7 +430,7 @@ TEST(SystemSequence, BeforeNonExistentSystemNoThrow)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<SysBeforeGhost>();
+    gm.registerSystem<SysBeforeGhost>().before<SysNeverRegistered>();
     EXPECT_NO_THROW(gm.update());
     EXPECT_NE(pos(90), -1);
 }
@@ -530,8 +480,8 @@ TEST(SystemSequence, DependentSystemsCorrectOrder)
     g_observedValue = 0;
 
     GeneralManager gm;
-    gm.registerSystem<DepWriter>();
-    gm.registerSystem<DepReader>();
+    gm.registerSystem<DepWriter>().writes<CompA>();
+    gm.registerSystem<DepReader>().reads<CompA>();
     gm.update();
 
     EXPECT_EQ(g_observedValue.load(), 42);
@@ -639,9 +589,8 @@ TEST(SystemSequence, MultipleUpdatesStable)
     EXPECT_EQ(BulkSys<21>::counter.load(), 3);
 }
 
-// Systems: write-write split by an explicit barrier.
-// Verifies that two systems writing the same component but separated in time by a
-// barrier do not produce an ordering cycle, regardless of registration order.
+// Write-write pair split in time by an explicit barrier must not produce a cycle,
+// regardless of registration order.
 class WWBarrier : public SystemCore<WWBarrier>
 {
 public:
@@ -651,15 +600,11 @@ class WWBeforeBarrier : public SystemCore<WWBeforeBarrier>
 {
 public:
     void update(GeneralManager&) override { record(201); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getBeforeSystems() override { return {typeid(WWBarrier)}; }
 };
 class WWAfterBarrier : public SystemCore<WWAfterBarrier>
 {
 public:
     void update(GeneralManager&) override { record(202); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getAfterSystems() override { return {typeid(WWBarrier)}; }
 };
 
 TEST(SystemSequence, WriteWriteWithBarrierRegisteredBeforeAfter)
@@ -667,8 +612,8 @@ TEST(SystemSequence, WriteWriteWithBarrierRegisteredBeforeAfter)
     resetLog();
     GeneralManager gm;
     gm.registerSystem<WWBarrier>();
-    gm.registerSystem<WWBeforeBarrier>();
-    gm.registerSystem<WWAfterBarrier>();
+    gm.registerSystem<WWBeforeBarrier>().writes<CompA>().before<WWBarrier>();
+    gm.registerSystem<WWAfterBarrier>().writes<CompA>().after<WWBarrier>();
     EXPECT_NO_THROW(gm.update());
 
     ASSERT_NE(pos(200), -1);
@@ -683,8 +628,8 @@ TEST(SystemSequence, WriteWriteWithBarrierRegisteredAfterBefore)
     resetLog();
     GeneralManager gm;
     gm.registerSystem<WWBarrier>();
-    gm.registerSystem<WWAfterBarrier>();
-    gm.registerSystem<WWBeforeBarrier>();
+    gm.registerSystem<WWAfterBarrier>().writes<CompA>().after<WWBarrier>();
+    gm.registerSystem<WWBeforeBarrier>().writes<CompA>().before<WWBarrier>();
     EXPECT_NO_THROW(gm.update());
 
     ASSERT_NE(pos(200), -1);
@@ -694,10 +639,8 @@ TEST(SystemSequence, WriteWriteWithBarrierRegisteredAfterBefore)
     EXPECT_LT(pos(200), pos(202));
 }
 
-// Systems: partial write-write conflict.
-// X writes {CompA, CompB}; Y writes {CompA}; Z writes {CompB}. Y and Z do not conflict
-// with each other, so greedy coloring should place X alone in sublayer 0 and Y, Z together
-// in sublayer 1, allowing Y and Z to run concurrently.
+// Partial write-write conflict: Y and Z do not conflict with each other and should
+// stay parallel while X runs alone.
 class WWPartialX : public SystemCore<WWPartialX>
 {
 public:
@@ -706,7 +649,6 @@ public:
         record(210);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA), typeid(CompB)}; }
 };
 class WWPartialY : public SystemCore<WWPartialY>
 {
@@ -716,7 +658,6 @@ public:
         record(211);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class WWPartialZ : public SystemCore<WWPartialZ>
 {
@@ -726,16 +667,15 @@ public:
         record(212);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
 };
 
 TEST(SystemSequence, WriteWritePartialConflictKeepsParallelism)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<WWPartialX>();
-    gm.registerSystem<WWPartialY>();
-    gm.registerSystem<WWPartialZ>();
+    gm.registerSystem<WWPartialX>().writes<CompA, CompB>();
+    gm.registerSystem<WWPartialY>().writes<CompA>();
+    gm.registerSystem<WWPartialZ>().writes<CompB>();
 
     auto start = std::chrono::steady_clock::now();
     gm.update();
@@ -752,9 +692,7 @@ TEST(SystemSequence, WriteWritePartialConflictKeepsParallelism)
     EXPECT_LT(pos(210), pos(212));
 }
 
-// Systems: write-write pair must be SERIALIZED (not just ordered by record).
-// If postpass mistakenly leaves both in the same sublayer, parallelFor would run
-// them concurrently and total time would collapse to ~50ms instead of ~100ms.
+// Write-write pair must be serialized in time, not just ordered in the log.
 class WWSerialA : public SystemCore<WWSerialA>
 {
 public:
@@ -763,7 +701,6 @@ public:
         record(220);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class WWSerialB : public SystemCore<WWSerialB>
 {
@@ -773,15 +710,14 @@ public:
         record(221);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 
 TEST(SystemSequence, WriteWriteActuallySerialized)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<WWSerialA>();
-    gm.registerSystem<WWSerialB>();
+    gm.registerSystem<WWSerialA>().writes<CompA>();
+    gm.registerSystem<WWSerialB>().writes<CompA>();
 
     auto start = std::chrono::steady_clock::now();
     gm.update();
@@ -793,9 +729,7 @@ TEST(SystemSequence, WriteWriteActuallySerialized)
     EXPECT_LT(pos(220), pos(221));
 }
 
-// Systems: 4 non-writers + 2 write-writers in the same provisional layer.
-// Postpass should put 5 systems (4 non-writers + first writer) in sublayer 0 and
-// only the second writer in sublayer 1, preserving most parallelism.
+// 4 non-writers + 2 write-writers in one layer: the split should keep most parallelism.
 template <int Id>
 class WWParaNoWrite : public SystemCore<WWParaNoWrite<Id>>
 {
@@ -806,13 +740,11 @@ class WWParaWriter1 : public SystemCore<WWParaWriter1>
 {
 public:
     void update(GeneralManager&) override { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class WWParaWriter2 : public SystemCore<WWParaWriter2>
 {
 public:
     void update(GeneralManager&) override { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 
 TEST(SystemSequence, WriteWriteParallelismPreservedAroundConflict)
@@ -822,8 +754,8 @@ TEST(SystemSequence, WriteWriteParallelismPreservedAroundConflict)
     gm.registerSystem<WWParaNoWrite<1>>();
     gm.registerSystem<WWParaNoWrite<2>>();
     gm.registerSystem<WWParaNoWrite<3>>();
-    gm.registerSystem<WWParaWriter1>();
-    gm.registerSystem<WWParaWriter2>();
+    gm.registerSystem<WWParaWriter1>().writes<CompA>();
+    gm.registerSystem<WWParaWriter2>().writes<CompA>();
 
     auto start = std::chrono::steady_clock::now();
     gm.update();
@@ -835,44 +767,37 @@ TEST(SystemSequence, WriteWriteParallelismPreservedAroundConflict)
     EXPECT_LT(ms, 250);
 }
 
-// Systems: two stacked provisional layers, each with its own write-write pair.
-// Verifies the postpass operates on each layer independently — a leaked write-set
-// accumulator across layers would corrupt the second layer's coloring.
+// Two stacked layers, each with its own write-write pair — the split must be
+// computed per layer, without leaking write sets across layers.
 class WWStackL1A : public SystemCore<WWStackL1A>
 {
 public:
     void update(GeneralManager&) override { record(240); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class WWStackL1B : public SystemCore<WWStackL1B>
 {
 public:
     void update(GeneralManager&) override { record(241); }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
 };
 class WWStackL2C : public SystemCore<WWStackL2C>
 {
 public:
     void update(GeneralManager&) override { record(242); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
 };
 class WWStackL2D : public SystemCore<WWStackL2D>
 {
 public:
     void update(GeneralManager&) override { record(243); }
-    std::vector<std::type_index> getReadComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompB)}; }
 };
 
 TEST(SystemSequence, WriteWriteSplitInMultipleLayersIndependently)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<WWStackL1A>();
-    gm.registerSystem<WWStackL1B>();
-    gm.registerSystem<WWStackL2C>();
-    gm.registerSystem<WWStackL2D>();
+    gm.registerSystem<WWStackL1A>().writes<CompA>();
+    gm.registerSystem<WWStackL1B>().writes<CompA>();
+    gm.registerSystem<WWStackL2C>().reads<CompA>().writes<CompB>();
+    gm.registerSystem<WWStackL2D>().reads<CompA>().writes<CompB>();
     EXPECT_NO_THROW(gm.update());
 
     ASSERT_NE(pos(240), -1);
@@ -884,30 +809,72 @@ TEST(SystemSequence, WriteWriteSplitInMultipleLayersIndependently)
     EXPECT_LT(pos(242), pos(243));
 }
 
-// Systems: two systems with shared write component AND mutual explicit before-cycle.
-// Removing the implicit write-write edge must not suppress detection of a real cycle
-// formed via explicit dependencies.
+// Shared write component plus a mutual explicit cycle must still be detected.
 class WWCycleA : public SystemCore<WWCycleA>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getBeforeSystems() override;
 };
 class WWCycleB : public SystemCore<WWCycleB>
 {
 public:
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(CompA)}; }
-    std::vector<std::type_index> getBeforeSystems() override;
 };
-std::vector<std::type_index> WWCycleA::getBeforeSystems() { return {typeid(WWCycleB)}; }
-std::vector<std::type_index> WWCycleB::getBeforeSystems() { return {typeid(WWCycleA)}; }
 
 TEST(SystemSequence, CycleViaExplicitBetweenWriteWriteSystemsThrows)
 {
     GeneralManager gm;
-    gm.registerSystem<WWCycleA>();
-    gm.registerSystem<WWCycleB>();
+    gm.registerSystem<WWCycleA>().writes<CompA>().before<WWCycleB>();
+    gm.registerSystem<WWCycleB>().writes<CompA>().before<WWCycleA>();
     EXPECT_THROW(gm.update(), std::runtime_error);
+}
+
+// Registration-chain specifics
+class FluentDupA : public SystemCore<FluentDupA>
+{
+public:
+    void update(GeneralManager&) override { record(250); }
+};
+class FluentDupB : public SystemCore<FluentDupB>
+{
+public:
+    void update(GeneralManager&) override { record(251); }
+};
+
+TEST(SystemSequence, DuplicateDeclarationsAreHarmless)
+{
+    resetLog();
+    GeneralManager gm;
+    gm.registerSystem<FluentDupA>().writes<CompA>().writes<CompA>().before<FluentDupB>().before<FluentDupB>();
+    gm.registerSystem<FluentDupB>().writes<CompA>();
+    EXPECT_NO_THROW(gm.update());
+
+    ASSERT_NE(pos(250), -1);
+    ASSERT_NE(pos(251), -1);
+    EXPECT_LT(pos(250), pos(251));
+}
+
+class FluentMergeSys : public SystemCore<FluentMergeSys>
+{
+public:
+    void update(GeneralManager&) override { record(260); }
+};
+class FluentMergeReader : public SystemCore<FluentMergeReader>
+{
+public:
+    void update(GeneralManager&) override { record(261); }
+};
+
+TEST(SystemSequence, RepeatedRegistrationMergesMetadata)
+{
+    resetLog();
+    GeneralManager gm;
+    // Same type registered twice — both instances share one metadata record
+    gm.registerSystem<FluentMergeSys>().writes<CompA>();
+    gm.registerSystem<FluentMergeSys>();
+    gm.registerSystem<FluentMergeReader>().reads<CompA>();
+    EXPECT_NO_THROW(gm.update());
+
+    ASSERT_NE(pos(261), -1);
+    EXPECT_LT(pos(260), pos(261));
 }

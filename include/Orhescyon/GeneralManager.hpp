@@ -18,6 +18,7 @@
 #include "Components/ComponentManager.hpp"
 #include "Entitys/EntityManager.hpp"
 #include "Systems/SystemManager.hpp"
+#include "Systems/SystemRegistration.hpp"
 #include "Contexts/ContextManager.hpp"
 #include "Jobs/DefaultJobSystem.hpp"
 #include "Views/ComponentView.hpp"
@@ -218,9 +219,9 @@ public:
 		return *sm;
 	}
 
-	// Registers a new system;
+	// Registers a new system; chain .before/.after/.reads/.writes on the returned registration.
 	template <typename TSystem, typename... Args>
-	void registerSystem(Args&&... args)
+	SystemRegistration<TSystem> registerSystem(Args&&... args)
 	{
 		static_assert(std::is_base_of_v<ISystemCore, TSystem>, "TSystem must derive from ISystemCore");
 
@@ -233,11 +234,12 @@ public:
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::RegisterSystem: SystemManager \"" << smName
 			          << "\" not found. Register it first via registerSystemManager." << std::endl;
-			return;
+			return SystemRegistration<TSystem>(nullptr);
 		}
 #endif
 		_systemTypeToManager.insert_or_assign(std::type_index(typeid(TSystem)), smName);
 		sm->addSystem<TSystem>(*this, std::move(system));
+		return SystemRegistration<TSystem>(sm);
 	}
 
 	// Subscribes an entity to a system.

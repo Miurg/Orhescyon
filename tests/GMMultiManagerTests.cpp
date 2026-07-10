@@ -143,7 +143,8 @@ TEST(MultiManager, RegisterSystemIntoUnknownManagerWarnsAndSkips)
     g_unknownRegisteredCalls = 0;
 
     GeneralManager gm;
-    EXPECT_NO_THROW(gm.registerSystem<UnknownManagerSystem>());
+    // Chaining on the rejected registration must be a safe no-op
+    EXPECT_NO_THROW(gm.registerSystem<UnknownManagerSystem>().before<DefUpdate>().writes<MMPos>());
     EXPECT_EQ(g_unknownRegisteredCalls.load(), 0);
 }
 
@@ -230,8 +231,8 @@ TEST(MultiManager, SubscribeRoutedByPriorRegistration)
 
     GeneralManager gm;
     gm.registerSystemManager("physics");
-    gm.registerSystem<PhysMove>();
-    gm.registerSystem<DefHealth>();
+    gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
+    gm.registerSystem<DefHealth>().writes<MMHealth>();
 
     Entity e = gm.createEntity();
     gm.addComponent<MMPos>(e);
@@ -249,7 +250,7 @@ TEST(MultiManager, UnsubscribeRoutedByPriorRegistration)
 
     GeneralManager gm;
     gm.registerSystemManager("physics");
-    gm.registerSystem<PhysMove>();
+    gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
 
     Entity e = gm.createEntity();
     gm.addComponent<MMPos>(e);
@@ -280,8 +281,8 @@ TEST(MultiManager, DestroyEntityUnsubscribesFromAllManagers)
 
     GeneralManager gm;
     gm.registerSystemManager("physics");
-    gm.registerSystem<PhysMove>();
-    gm.registerSystem<DefHealth>();
+    gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
+    gm.registerSystem<DefHealth>().writes<MMHealth>();
 
     Entity e = gm.createEntity();
     gm.addComponent<MMPos>(e);
@@ -302,8 +303,8 @@ TEST(MultiManager, DestroyEntityNotSubscribedAnywhereIsSafe)
 {
     GeneralManager gm;
     gm.registerSystemManager("physics");
-    gm.registerSystem<PhysMove>();
-    gm.registerSystem<DefHealth>();
+    gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
+    gm.registerSystem<DefHealth>().writes<MMHealth>();
 
     Entity e = gm.createEntity();
     EXPECT_NO_THROW(gm.destroyEntity(e));
@@ -318,8 +319,8 @@ TEST(MultiManager, RemoveComponentAutoUnsubscribesCorrectManager)
 
     GeneralManager gm;
     gm.registerSystemManager("physics");
-    gm.registerSystem<PhysMove>();
-    gm.registerSystem<DefHealth>();
+    gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
+    gm.registerSystem<DefHealth>().writes<MMHealth>();
 
     Entity e = gm.createEntity();
     gm.addComponent<MMPos>(e);
@@ -346,14 +347,12 @@ class PhysDagA : public SystemCore<PhysDagA>
 public:
     std::string_view getSystemManagerName() const override { return "physics"; }
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(MMCompA)}; }
 };
 class PhysDagB : public SystemCore<PhysDagB>
 {
 public:
     std::string_view getSystemManagerName() const override { return "physics"; }
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getReadComponents() override { return {typeid(MMCompA)}; }
 };
 
 // Inverse dep direction on same components — would cycle if combined into one SM.
@@ -362,14 +361,12 @@ class RendDagA : public SystemCore<RendDagA>
 public:
     std::string_view getSystemManagerName() const override { return "render"; }
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getReadComponents() override { return {typeid(MMCompA)}; }
 };
 class RendDagB : public SystemCore<RendDagB>
 {
 public:
     std::string_view getSystemManagerName() const override { return "render"; }
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getWriteComponents() override { return {typeid(MMCompA)}; }
 };
 
 TEST(MultiManager, ManagerDagsAreIndependent)
@@ -378,10 +375,10 @@ TEST(MultiManager, ManagerDagsAreIndependent)
     gm.registerSystemManager("physics");
     gm.registerSystemManager("render");
 
-    gm.registerSystem<PhysDagA>();
-    gm.registerSystem<PhysDagB>();
-    gm.registerSystem<RendDagA>();
-    gm.registerSystem<RendDagB>();
+    gm.registerSystem<PhysDagA>().writes<MMCompA>();
+    gm.registerSystem<PhysDagB>().reads<MMCompA>();
+    gm.registerSystem<RendDagA>().reads<MMCompA>();
+    gm.registerSystem<RendDagB>().writes<MMCompA>();
 
     EXPECT_NO_THROW(gm.update("physics"));
     EXPECT_NO_THROW(gm.update("render"));
@@ -427,24 +424,20 @@ class PhysCycP : public SystemCore<PhysCycP>
 public:
     std::string_view getSystemManagerName() const override { return "physics"; }
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getBeforeSystems() override;
 };
 class PhysCycQ : public SystemCore<PhysCycQ>
 {
 public:
     std::string_view getSystemManagerName() const override { return "physics"; }
     void update(GeneralManager&) override {}
-    std::vector<std::type_index> getBeforeSystems() override;
 };
-std::vector<std::type_index> PhysCycP::getBeforeSystems() { return {typeid(PhysCycQ)}; }
-std::vector<std::type_index> PhysCycQ::getBeforeSystems() { return {typeid(PhysCycP)}; }
 
 TEST(MultiManager, CycleWithinSingleManagerStillThrows)
 {
     GeneralManager gm;
     gm.registerSystemManager("physics");
-    gm.registerSystem<PhysCycP>();
-    gm.registerSystem<PhysCycQ>();
+    gm.registerSystem<PhysCycP>().before<PhysCycQ>();
+    gm.registerSystem<PhysCycQ>().before<PhysCycP>();
 
     EXPECT_THROW(gm.update("physics"), std::runtime_error);
 }

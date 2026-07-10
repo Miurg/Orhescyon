@@ -61,7 +61,7 @@ Entity makeSubscribedEntity(GeneralManager& gm, float x, float dx)
 TEST(ComponentView, VisitsOnlySubscribedEntities)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     Entity subscribed = makeSubscribedEntity(gm, 1.0f, 0.0f);
 
@@ -80,7 +80,7 @@ TEST(ComponentView, VisitsOnlySubscribedEntities)
 TEST(ComponentView, JoinFiltersByExtraComponent)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     makeSubscribedEntity(gm, 1.0f, 0.0f);
     Entity withBlob = makeSubscribedEntity(gm, 2.0f, 0.0f);
@@ -102,7 +102,7 @@ TEST(ComponentView, JoinFiltersByExtraComponent)
 TEST(ComponentView, DenseRunsVisitEveryEntity)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     // 130 entities: two full 64-slot words (dense fast path) plus a partial word
     constexpr uint32_t entityCount = 130;
@@ -127,7 +127,7 @@ TEST(ComponentView, DenseRunsVisitEveryEntity)
 TEST(ComponentView, UnsubscribedHoleIsSkipped)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     Entity first = makeSubscribedEntity(gm, 1.0f, 0.0f);
     Entity middle = makeSubscribedEntity(gm, 2.0f, 0.0f);
@@ -145,7 +145,7 @@ TEST(ComponentView, UnsubscribedHoleIsSkipped)
 TEST(ComponentView, AutoUnsubscribeDropsEntityFromView)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     Entity kept = makeSubscribedEntity(gm, 1.0f, 0.0f);
     Entity dropped = makeSubscribedEntity(gm, 2.0f, 0.0f);
@@ -162,7 +162,7 @@ TEST(ComponentView, AutoUnsubscribeDropsEntityFromView)
 TEST(ComponentView, DestroyedEntityDropsFromView)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     Entity kept = makeSubscribedEntity(gm, 1.0f, 0.0f);
     Entity destroyed = makeSubscribedEntity(gm, 2.0f, 0.0f);
@@ -179,7 +179,7 @@ TEST(ComponentView, DestroyedEntityDropsFromView)
 TEST(ComponentView, ConstComponentsAreReadable)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
     makeSubscribedEntity(gm, 7.0f, 3.0f);
 
     float x = 0.0f;
@@ -198,7 +198,7 @@ TEST(ComponentView, ConstComponentsAreReadable)
 TEST(ComponentView, ReconstructedEntityMatchesHandle)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     // Recycle a slot a few times so the live entity has a non-zero generation
     for (int i = 0; i < 3; ++i)
@@ -219,7 +219,7 @@ TEST(ComponentView, ReconstructedEntityMatchesHandle)
 TEST(ComponentView, WritesThroughViewPersist)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
     Entity entity = makeSubscribedEntity(gm, 0.0f, 0.0f);
 
     gm.forEachSubscribedEntityWith<ViewMovementSystem, ViewPosition>(
@@ -231,7 +231,7 @@ TEST(ComponentView, WritesThroughViewPersist)
 TEST(ComponentView, CrtpHelperDrivesSystemUpdate)
 {
     GeneralManager gm;
-    gm.registerSystem<IntegrationSystem>();
+    gm.registerSystem<IntegrationSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     Entity first = gm.createEntity();
     gm.addComponent<ViewPosition>(first, 0.0f, 0.0f);
@@ -253,7 +253,7 @@ TEST(ComponentView, CrtpHelperDrivesSystemUpdate)
 TEST(ComponentView, SystemWithoutSubscribersIsNoop)
 {
     GeneralManager gm;
-    gm.registerSystem<ViewMovementSystem>();
+    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
     uint32_t calls = 0;
     gm.forEachSubscribedEntityWith<ViewMovementSystem, ViewPosition, ViewVelocity>(

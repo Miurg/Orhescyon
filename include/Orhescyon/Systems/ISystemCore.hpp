@@ -1,8 +1,7 @@
 #pragma once
 
+#include <cstddef>
 #include <string_view>
-#include <vector>
-#include <typeindex>
 #include "../Entitys/Entity.hpp"
 
 namespace Orhescyon
@@ -17,13 +16,15 @@ public:
 	virtual bool shouldProcessEntity(Entity entity, GeneralManager& gm) = 0;
 	virtual void onRegistered(GeneralManager& gm) = 0;
 	virtual void onShutdown(GeneralManager& gm) = 0;
-	[[nodiscard]] virtual std::vector<std::type_index> getReadComponents() = 0;
-	[[nodiscard]] virtual std::vector<std::type_index> getWriteComponents() = 0;
-	[[nodiscard]] virtual std::vector<std::type_index> getBeforeSystems() = 0;
-	[[nodiscard]] virtual std::vector<std::type_index> getAfterSystems() = 0;
-	[[nodiscard]] virtual std::vector<std::type_index> getSystemDependencies() = 0;
 	virtual void onEntitySubscribed(Entity entity, GeneralManager& gm) = 0;
 	virtual void onEntityUnsubscribed(Entity entity, GeneralManager& gm) = 0;
+
+	// Scheduling diagnostics only
+	[[nodiscard]] virtual size_t requiredComponentCount() const
+	{
+		return 0;
+	}
+
 	[[nodiscard]] virtual std::string_view getSystemManagerName() const
 	{
 		return "default";
