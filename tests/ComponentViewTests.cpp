@@ -50,10 +50,10 @@ public:
 
 Entity makeSubscribedEntity(GeneralManager& gm, float x, float dx)
 {
-    Entity entity = gm.createEntity();
-    gm.addComponent<ViewPosition>(entity, x, 0.0f);
-    gm.addComponent<ViewVelocity>(entity, dx, 0.0f);
-    gm.subscribeEntity<ViewMovementSystem>(entity);
+    Entity entity = gm.createEntityImmediate();
+    gm.addComponentImmediate<ViewPosition>(entity, x, 0.0f);
+    gm.addComponentImmediate<ViewVelocity>(entity, dx, 0.0f);
+    gm.subscribeEntityImmediate<ViewMovementSystem>(entity);
     return entity;
 }
 } // namespace
@@ -65,9 +65,9 @@ TEST(ComponentView, VisitsOnlySubscribedEntities)
 
     Entity subscribed = makeSubscribedEntity(gm, 1.0f, 0.0f);
 
-    Entity unsubscribed = gm.createEntity();
-    gm.addComponent<ViewPosition>(unsubscribed, 2.0f, 0.0f);
-    gm.addComponent<ViewVelocity>(unsubscribed, 0.0f, 0.0f);
+    Entity unsubscribed = gm.createEntityImmediate();
+    gm.addComponentImmediate<ViewPosition>(unsubscribed, 2.0f, 0.0f);
+    gm.addComponentImmediate<ViewVelocity>(unsubscribed, 0.0f, 0.0f);
 
     std::vector<Entity> visited;
     gm.forEachSubscribedEntityWith<ViewMovementSystem, ViewPosition, ViewVelocity>(
@@ -84,7 +84,7 @@ TEST(ComponentView, JoinFiltersByExtraComponent)
 
     makeSubscribedEntity(gm, 1.0f, 0.0f);
     Entity withBlob = makeSubscribedEntity(gm, 2.0f, 0.0f);
-    gm.addComponent<ViewRareBlob>(withBlob, 42);
+    gm.addComponentImmediate<ViewRareBlob>(withBlob, 42);
 
     // ViewRareBlob is Sparse — exercises the mixed-storage bit-scan path
     std::vector<Entity> visited;
@@ -133,7 +133,7 @@ TEST(ComponentView, UnsubscribedHoleIsSkipped)
     Entity middle = makeSubscribedEntity(gm, 2.0f, 0.0f);
     Entity last = makeSubscribedEntity(gm, 3.0f, 0.0f);
 
-    gm.unsubscribeEntity<ViewMovementSystem>(middle);
+    gm.unsubscribeEntityImmediate<ViewMovementSystem>(middle);
 
     std::vector<Entity> visited;
     gm.forEachSubscribedEntityWith<ViewMovementSystem, ViewPosition, ViewVelocity>(
@@ -150,7 +150,7 @@ TEST(ComponentView, AutoUnsubscribeDropsEntityFromView)
     Entity kept = makeSubscribedEntity(gm, 1.0f, 0.0f);
     Entity dropped = makeSubscribedEntity(gm, 2.0f, 0.0f);
 
-    gm.removeComponent<ViewVelocity>(dropped);
+    gm.removeComponentImmediate<ViewVelocity>(dropped);
 
     std::vector<Entity> visited;
     gm.forEachSubscribedEntityWith<ViewMovementSystem, ViewPosition>(
@@ -167,7 +167,7 @@ TEST(ComponentView, DestroyedEntityDropsFromView)
     Entity kept = makeSubscribedEntity(gm, 1.0f, 0.0f);
     Entity destroyed = makeSubscribedEntity(gm, 2.0f, 0.0f);
 
-    gm.destroyEntity(destroyed);
+    gm.destroyEntityImmediate(destroyed);
 
     std::vector<Entity> visited;
     gm.forEachSubscribedEntityWith<ViewMovementSystem, ViewPosition, ViewVelocity>(
@@ -203,7 +203,7 @@ TEST(ComponentView, ReconstructedEntityMatchesHandle)
     // Recycle a slot a few times so the live entity has a non-zero generation
     for (int i = 0; i < 3; ++i)
     {
-        gm.destroyEntity(gm.createEntity());
+        gm.destroyEntityImmediate(gm.createEntityImmediate());
     }
     Entity entity = makeSubscribedEntity(gm, 1.0f, 0.0f);
     ASSERT_GT(entity.generation, 0u);
@@ -233,15 +233,15 @@ TEST(ComponentView, CrtpHelperDrivesSystemUpdate)
     GeneralManager gm;
     gm.registerSystem<IntegrationSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
-    Entity first = gm.createEntity();
-    gm.addComponent<ViewPosition>(first, 0.0f, 0.0f);
-    gm.addComponent<ViewVelocity>(first, 1.0f, 0.0f);
-    gm.subscribeEntity<IntegrationSystem>(first);
+    Entity first = gm.createEntityImmediate();
+    gm.addComponentImmediate<ViewPosition>(first, 0.0f, 0.0f);
+    gm.addComponentImmediate<ViewVelocity>(first, 1.0f, 0.0f);
+    gm.subscribeEntityImmediate<IntegrationSystem>(first);
 
-    Entity second = gm.createEntity();
-    gm.addComponent<ViewPosition>(second, 10.0f, 0.0f);
-    gm.addComponent<ViewVelocity>(second, -2.0f, 0.0f);
-    gm.subscribeEntity<IntegrationSystem>(second);
+    Entity second = gm.createEntityImmediate();
+    gm.addComponentImmediate<ViewPosition>(second, 10.0f, 0.0f);
+    gm.addComponentImmediate<ViewVelocity>(second, -2.0f, 0.0f);
+    gm.subscribeEntityImmediate<IntegrationSystem>(second);
 
     gm.update();
     gm.update();

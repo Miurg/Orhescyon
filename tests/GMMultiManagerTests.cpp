@@ -234,10 +234,10 @@ TEST(MultiManager, SubscribeRoutedByPriorRegistration)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntity();
-    gm.addComponent<MMPos>(e);
-    gm.addComponent<MMVel>(e);
-    gm.subscribeEntity<PhysMove>(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<MMPos>(e);
+    gm.addComponentImmediate<MMVel>(e);
+    gm.subscribeEntityImmediate<PhysMove>(e);
 
     EXPECT_EQ(g_physSubscribed.load(), 1);
     EXPECT_EQ(g_defSubscribed.load(), 0);
@@ -252,11 +252,11 @@ TEST(MultiManager, UnsubscribeRoutedByPriorRegistration)
     gm.registerSystemManager("physics");
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
 
-    Entity e = gm.createEntity();
-    gm.addComponent<MMPos>(e);
-    gm.addComponent<MMVel>(e);
-    gm.subscribeEntity<PhysMove>(e);
-    gm.unsubscribeEntity<PhysMove>(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<MMPos>(e);
+    gm.addComponentImmediate<MMVel>(e);
+    gm.subscribeEntityImmediate<PhysMove>(e);
+    gm.unsubscribeEntityImmediate<PhysMove>(e);
 
     EXPECT_EQ(g_physSubscribed.load(), 1);
     EXPECT_EQ(g_physUnsubscribed.load(), 1);
@@ -265,11 +265,11 @@ TEST(MultiManager, UnsubscribeRoutedByPriorRegistration)
 TEST(MultiManager, SubscribeBeforeRegisterWarnsNoCrash)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<MMPos>(e);
-    gm.addComponent<MMVel>(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<MMPos>(e);
+    gm.addComponentImmediate<MMVel>(e);
 
-    EXPECT_NO_THROW(gm.subscribeEntity<PhysMove>(e));
+    EXPECT_NO_THROW(gm.subscribeEntityImmediate<PhysMove>(e));
 }
 
 TEST(MultiManager, DestroyEntityUnsubscribesFromAllManagers)
@@ -284,17 +284,17 @@ TEST(MultiManager, DestroyEntityUnsubscribesFromAllManagers)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntity();
-    gm.addComponent<MMPos>(e);
-    gm.addComponent<MMVel>(e);
-    gm.addComponent<MMHealth>(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<MMPos>(e);
+    gm.addComponentImmediate<MMVel>(e);
+    gm.addComponentImmediate<MMHealth>(e);
 
-    gm.subscribeEntity<PhysMove>(e);
-    gm.subscribeEntity<DefHealth>(e);
+    gm.subscribeEntityImmediate<PhysMove>(e);
+    gm.subscribeEntityImmediate<DefHealth>(e);
     EXPECT_EQ(g_physSubscribed.load(), 1);
     EXPECT_EQ(g_defSubscribed.load(), 1);
 
-    gm.destroyEntity(e);
+    gm.destroyEntityImmediate(e);
     EXPECT_EQ(g_physUnsubscribed.load(), 1);
     EXPECT_EQ(g_defUnsubscribed.load(), 1);
 }
@@ -306,8 +306,8 @@ TEST(MultiManager, DestroyEntityNotSubscribedAnywhereIsSafe)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntity();
-    EXPECT_NO_THROW(gm.destroyEntity(e));
+    Entity e = gm.createEntityImmediate();
+    EXPECT_NO_THROW(gm.destroyEntityImmediate(e));
 }
 
 TEST(MultiManager, RemoveComponentAutoUnsubscribesCorrectManager)
@@ -322,18 +322,18 @@ TEST(MultiManager, RemoveComponentAutoUnsubscribesCorrectManager)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntity();
-    gm.addComponent<MMPos>(e);
-    gm.addComponent<MMVel>(e);
-    gm.addComponent<MMHealth>(e);
-    gm.subscribeEntity<PhysMove>(e);
-    gm.subscribeEntity<DefHealth>(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<MMPos>(e);
+    gm.addComponentImmediate<MMVel>(e);
+    gm.addComponentImmediate<MMHealth>(e);
+    gm.subscribeEntityImmediate<PhysMove>(e);
+    gm.subscribeEntityImmediate<DefHealth>(e);
 
-    gm.removeComponent<MMPos>(e);
+    gm.removeComponentImmediate<MMPos>(e);
 
     EXPECT_EQ(g_physUnsubscribed.load(), 1);
-    gm.addComponent<MMPos>(e);
-    EXPECT_NO_THROW(gm.subscribeEntity<PhysMove>(e));
+    gm.addComponentImmediate<MMPos>(e);
+    EXPECT_NO_THROW(gm.subscribeEntityImmediate<PhysMove>(e));
     EXPECT_EQ(g_physSubscribed.load(), 2);
 
     EXPECT_EQ(g_defUnsubscribed.load(), 0);

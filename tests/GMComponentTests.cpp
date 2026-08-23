@@ -10,8 +10,8 @@ struct Health { int value; };
 TEST(GeneralManager, AddAndGetComponent)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<Position>(e, 3.0f, 4.0f);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<Position>(e, 3.0f, 4.0f);
 
     Position* p = gm.getComponent<Position>(e);
     ASSERT_NE(p, nullptr);
@@ -22,7 +22,7 @@ TEST(GeneralManager, AddAndGetComponent)
 TEST(GeneralManager, GetMissingComponentReturnsNull)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
+    Entity e = gm.createEntityImmediate();
 
     EXPECT_EQ(gm.getComponent<Position>(e), nullptr);
 }
@@ -30,18 +30,18 @@ TEST(GeneralManager, GetMissingComponentReturnsNull)
 TEST(GeneralManager, AddComponentToInactiveReturnsNull)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.destroyEntity(e);
+    Entity e = gm.createEntityImmediate();
+    gm.destroyEntityImmediate(e);
 
-    EXPECT_EQ(gm.addComponent<Position>(e, 0.0f, 0.0f), nullptr);
+    EXPECT_EQ(gm.addComponentImmediate<Position>(e, 0.0f, 0.0f), nullptr);
 }
 
 TEST(GeneralManager, RemoveComponent)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<Position>(e, 1.0f, 2.0f);
-    gm.removeComponent<Position>(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
+    gm.removeComponentImmediate<Position>(e);
 
     EXPECT_EQ(gm.getComponent<Position>(e), nullptr);
 }
@@ -49,10 +49,10 @@ TEST(GeneralManager, RemoveComponent)
 TEST(GeneralManager, DestroyEntityClearsComponents)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<Position>(e, 1.0f, 2.0f);
-    gm.addComponent<Health>(e, 100);
-    gm.destroyEntity(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
+    gm.addComponentImmediate<Health>(e, 100);
+    gm.destroyEntityImmediate(e);
 
     // If entity inactive - getComponent return nullptr
     EXPECT_EQ(gm.getComponent<Position>(e), nullptr);
@@ -62,7 +62,7 @@ TEST(GeneralManager, DestroyEntityClearsComponents)
 TEST(GeneralManager, HasComponentReturnsFalseWhenMissing)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
+    Entity e = gm.createEntityImmediate();
 
     EXPECT_FALSE(gm.hasComponent<Position>(e));
 }
@@ -70,8 +70,8 @@ TEST(GeneralManager, HasComponentReturnsFalseWhenMissing)
 TEST(GeneralManager, HasComponentReturnsTrueAfterAdd)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<Position>(e, 1.0f, 2.0f);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
 
     EXPECT_TRUE(gm.hasComponent<Position>(e));
 }
@@ -79,9 +79,9 @@ TEST(GeneralManager, HasComponentReturnsTrueAfterAdd)
 TEST(GeneralManager, HasComponentReturnsFalseAfterRemove)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<Position>(e, 1.0f, 2.0f);
-    gm.removeComponent<Position>(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
+    gm.removeComponentImmediate<Position>(e);
 
     EXPECT_FALSE(gm.hasComponent<Position>(e));
 }
@@ -89,9 +89,9 @@ TEST(GeneralManager, HasComponentReturnsFalseAfterRemove)
 TEST(GeneralManager, HasComponentOnInactiveEntityReturnsFalse)
 {
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<Position>(e, 1.0f, 2.0f);
-    gm.destroyEntity(e);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
+    gm.destroyEntityImmediate(e);
 
     EXPECT_FALSE(gm.hasComponent<Position>(e));
 }
@@ -99,12 +99,12 @@ TEST(GeneralManager, HasComponentOnInactiveEntityReturnsFalse)
 TEST(GeneralManager, RecycledSlotHasNoStaleComponents)
 {
     GeneralManager gm;
-    Entity first = gm.createEntity();
-    gm.addComponent<Position>(first, 1.0f, 2.0f);
-    gm.addComponent<Health>(first, 100);
-    gm.destroyEntity(first);
+    Entity first = gm.createEntityImmediate();
+    gm.addComponentImmediate<Position>(first, 1.0f, 2.0f);
+    gm.addComponentImmediate<Health>(first, 100);
+    gm.destroyEntityImmediate(first);
 
-    Entity second = gm.createEntity();
+    Entity second = gm.createEntityImmediate();
     ASSERT_EQ(second.slot, first.slot);
 
     EXPECT_FALSE(gm.hasComponent<Position>(second));
@@ -134,11 +134,11 @@ TEST(GeneralManager, DestroyEntityDestroysComponents)
 {
     TrackedResource::aliveCount = 0;
     GeneralManager gm;
-    Entity e = gm.createEntity();
-    gm.addComponent<TrackedResource>(e, 5);
+    Entity e = gm.createEntityImmediate();
+    gm.addComponentImmediate<TrackedResource>(e, 5);
     EXPECT_EQ(TrackedResource::aliveCount, 1);
 
-    gm.destroyEntity(e);
+    gm.destroyEntityImmediate(e);
     EXPECT_EQ(TrackedResource::aliveCount, 0);
 }
 
@@ -147,8 +147,8 @@ TEST(GeneralManager, ManagerDestructionDestroysComponents)
     TrackedResource::aliveCount = 0;
     {
         GeneralManager gm;
-        Entity e = gm.createEntity();
-        gm.addComponent<TrackedResource>(e, 5);
+        Entity e = gm.createEntityImmediate();
+        gm.addComponentImmediate<TrackedResource>(e, 5);
         EXPECT_EQ(TrackedResource::aliveCount, 1);
     }
     EXPECT_EQ(TrackedResource::aliveCount, 0);

@@ -94,19 +94,19 @@ public:
 	}
 
 	// Creates a new entity and marks it active.
-	Entity createEntity()
+	Entity createEntityImmediate()
 	{
 		Entity entity = _entityManager.createEntity();
 		return entity;
 	}
 
 	// Unsubscribes from systems, removes components, then frees the slot.
-	void destroyEntity(Entity entity)
+	void destroyEntityImmediate(Entity entity)
 	{
 #if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (!_entityManager.isActive(entity))
 		{
-			std::cerr << "WARNING::GENERAL_MANAGER::DestroyEntity on inactive entity " << entity << std::endl;
+			std::cerr << "WARNING::GENERAL_MANAGER::DestroyEntityImmediate on inactive entity " << entity << std::endl;
 			return;
 		}
 #endif
@@ -121,12 +121,12 @@ public:
 
 	// Adds a component to the entity. Returns pointer to it or nullptr if inactive.
 	template <typename TComponent, typename... Args>
-	TComponent* addComponent(Entity entity, Args&&... args)
+	TComponent* addComponentImmediate(Entity entity, Args&&... args)
 	{
 #ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
-			std::cerr << "WARNING::GENERAL_MANAGER::AddComponent on inactive entity " << entity << std::endl;
+			std::cerr << "WARNING::GENERAL_MANAGER::AddComponentImmediate on inactive entity " << entity << std::endl;
 			return nullptr;
 		}
 #endif
@@ -152,12 +152,12 @@ public:
 
 	// Removes a component and auto-unsubscribes from systems whose requirements no longer match.
 	template <typename TComponent>
-	void removeComponent(Entity entity)
+	void removeComponentImmediate(Entity entity)
 	{
 #ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
-			std::cerr << "WARNING::GENERAL_MANAGER::RemoveComponent on inactive entity " << entity << std::endl;
+			std::cerr << "WARNING::GENERAL_MANAGER::RemoveComponentImmediate on inactive entity " << entity << std::endl;
 			return;
 		}
 #endif
@@ -244,12 +244,12 @@ public:
 
 	// Subscribes an entity to a system.
 	template <typename TSystem>
-	void subscribeEntity(Entity entity)
+	void subscribeEntityImmediate(Entity entity)
 	{
 #ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
-			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntity on inactive entity " << entity << std::endl;
+			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntityImmediate on inactive entity " << entity << std::endl;
 			return;
 		}
 #endif
@@ -258,7 +258,7 @@ public:
 #ifdef ORHESCYON_HIGH_CHECK
 		if (it == _systemTypeToManager.end())
 		{
-			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntity: system " << typeid(TSystem).name()
+			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntityImmediate: system " << typeid(TSystem).name()
 			          << " not registered in any SystemManager" << std::endl;
 			return;
 		}
@@ -315,12 +315,12 @@ public:
 
 	// Unsubscribes an entity from a system.
 	template <typename TSystem>
-	void unsubscribeEntity(Entity entity)
+	void unsubscribeEntityImmediate(Entity entity)
 	{
 #ifdef ORHESCYON_HIGH_CHECK
 		if (!_entityManager.isActive(entity))
 		{
-			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntity on inactive entity " << entity << std::endl;
+			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntityImmediate on inactive entity " << entity << std::endl;
 			return;
 		}
 #endif
@@ -329,7 +329,7 @@ public:
 #ifdef ORHESCYON_HIGH_CHECK
 		if (it == _systemTypeToManager.end())
 		{
-			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntity: system " << typeid(TSystem).name()
+			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntityImmediate: system " << typeid(TSystem).name()
 			          << " not registered in any SystemManager" << std::endl;
 			return;
 		}
