@@ -331,9 +331,7 @@ TEST(MultiManager, RemoveComponentAutoUnsubscribesCorrectManager)
 
     gm.removeComponent<MMPos>(e);
 
-    // checkEntitySubscriptions removes the link without firing onEntityUnsubscribed;
-    // verify indirectly via resubscribe (HIGH_CHECK would warn "already subscribed").
-    EXPECT_EQ(g_physUnsubscribed.load(), 0);
+    EXPECT_EQ(g_physUnsubscribed.load(), 1);
     gm.addComponent<MMPos>(e);
     EXPECT_NO_THROW(gm.subscribeEntity<PhysMove>(e));
     EXPECT_EQ(g_physSubscribed.load(), 2);

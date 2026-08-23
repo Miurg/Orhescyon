@@ -209,10 +209,12 @@ public:
 			std::type_index systemType = *it;
 
 			bool shouldRemove = true;
+			ISystemCore* matchingSystem = nullptr;
 			for (auto& system : SystemCore)
 			{
 				if (std::type_index(typeid(*system)) == systemType)
 				{
+					matchingSystem = system.get();
 					shouldRemove = !system->shouldProcessEntity(entity, gm);
 					break;
 				}
@@ -220,6 +222,10 @@ public:
 
 			if (shouldRemove)
 			{
+				if (matchingSystem)
+				{
+					matchingSystem->onEntityUnsubscribed(entity, gm);
+				}
 				SystemToEntities[systemType].clear(entity.slot);
 				it = entitySystems.erase(it);
 			}
