@@ -158,6 +158,13 @@ public:
 		}
 #endif
 
+		auto entityIt = EntityToSystems.find(entity);
+		if (entityIt == EntityToSystems.end() ||
+		    std::ranges::find(entityIt->second, systemType) == entityIt->second.end())
+		{
+			return;
+		}
+
 		system->onEntityUnsubscribed(entity, gm);
 
 		auto systemIt = SystemToEntities.find(systemType);
@@ -166,7 +173,7 @@ public:
 			systemIt->second.clear(entity.slot);
 		}
 
-		auto entityIt = EntityToSystems.find(entity);
+		entityIt = EntityToSystems.find(entity);
 		if (entityIt != EntityToSystems.end())
 		{
 			auto& systems = entityIt->second;
