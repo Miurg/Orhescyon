@@ -5,6 +5,9 @@
 
 using namespace Orhescyon;
 
+namespace
+{
+
 struct Position { float x, y; };
 struct Velocity { float dx, dy; };
 struct Health { int value; };
@@ -192,3 +195,5 @@ TEST(GeneralManager, IsSubscribedToUnregisteredSystemReturnsFalse)
 
     EXPECT_FALSE(gm.isSubscribedTo<MovementSystem>(e));
 }
+
+} // namespace

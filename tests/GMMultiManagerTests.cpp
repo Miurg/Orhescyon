@@ -12,6 +12,9 @@
 
 using namespace Orhescyon;
 
+namespace
+{
+
 struct MMPos
 {
     float x = 0, y = 0;
@@ -582,3 +585,5 @@ TEST(MultiManager, SameTypeRegisteredTwiceInSameManager)
     gm.update();
     EXPECT_EQ(g_dualInstanceUpdates.load(), 2);
 }
+
+} // namespace

@@ -5,6 +5,9 @@
 
 using namespace Orhescyon;
 
+namespace
+{
+
 struct Health { int value; };
 
 struct GameConfig {};
@@ -31,3 +34,5 @@ TEST(GeneralManager, GetContextComponent)
     ASSERT_NE(h, nullptr);
     EXPECT_EQ(h->value, 42);
 }
+
+} // namespace

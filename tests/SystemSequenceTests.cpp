@@ -11,6 +11,9 @@
 
 using namespace Orhescyon;
 
+namespace
+{
+
 // Component stubs — used only as type tokens for dependency declarations
 struct CompA
 {
@@ -878,3 +881,5 @@ TEST(SystemSequence, RepeatedRegistrationMergesMetadata)
     ASSERT_NE(pos(261), -1);
     EXPECT_LT(pos(260), pos(261));
 }
+
+} // namespace

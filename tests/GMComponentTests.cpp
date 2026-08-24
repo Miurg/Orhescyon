@@ -4,6 +4,9 @@
 
 using namespace Orhescyon;
 
+namespace
+{
+
 struct Position { float x, y; };
 struct Health { int value; };
 
@@ -153,3 +156,5 @@ TEST(GeneralManager, ManagerDestructionDestroysComponents)
     }
     EXPECT_EQ(TrackedResource::aliveCount, 0);
 }
+
+} // namespace

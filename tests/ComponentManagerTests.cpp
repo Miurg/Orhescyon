@@ -4,7 +4,9 @@
 
 using namespace Orhescyon;
 
-struct Position 
+namespace
+{
+struct Position
 {
 	float x, y;
 };
@@ -120,6 +122,7 @@ struct ForeignSparseComponent
 {
 	int payload;
 };
+} // namespace
 
 // Foreign types opt into Sparse via trait specialization instead of the in-type marker
 template <>
@@ -129,6 +132,8 @@ struct Orhescyon::ComponentStorageTraits<ForeignSparseComponent>
 	static constexpr uint32_t blockSize = 256;
 };
 
+namespace
+{
 TEST(ComponentManager, StoragePolicyDispatch)
 {
 	static_assert(std::is_same_v<ComponentManager::StorageFor<Position>, ComponentColumn<Position, 4096>>);
@@ -148,3 +153,5 @@ TEST(ComponentManager, StoragePolicyDispatch)
 	cm.removeEntity(e1);
 	EXPECT_FALSE(cm.hasComponent<RareSparseComponent>(e1));
 }
+
+} // namespace
