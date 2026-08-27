@@ -5,11 +5,14 @@
 //   ORHESCYON_LOW_CHECK  — cheap guards.
 //   ORHESCYON_HIGH_CHECK — LOW + dev diagnostics.
 
+#include <cstdint>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <typeindex>
 #include <unordered_map>
 #include <utility>
@@ -22,6 +25,7 @@
 #include "Contexts/ContextManager.hpp"
 #include "Jobs/DefaultJobSystem.hpp"
 #include "Views/ComponentView.hpp"
+#include "Deferred/DeferredChangeQueue.hpp"
 
 namespace Orhescyon
 {
@@ -39,6 +43,7 @@ private:
 	std::unordered_map<std::string, SystemManager> _systemManagers;
 	std::vector<std::string> _systemManagerOrder;
 	std::unordered_map<std::type_index, std::string> _systemTypeToManager;
+	DeferredChangeQueue _deferredChangeQueue;
 
 	SystemManager* findSystemManager(std::string_view name)
 	{
@@ -93,49 +98,6 @@ public:
 		}
 	}
 
-	// Creates a new entity and marks it active.
-	Entity createEntityImmediate()
-	{
-		Entity entity = _entityManager.createEntity();
-		return entity;
-	}
-
-	// Unsubscribes from systems, removes components, then frees the slot.
-	void destroyEntityImmediate(Entity entity)
-	{
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (!_entityManager.isActive(entity))
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::DestroyEntityImmediate on inactive entity " << entity << std::endl;
-			return;
-		}
-#endif
-
-		for (auto& [name, sm] : _systemManagers)
-		{
-			sm.unsubscribeFromAll(entity, *this);
-		}
-		_componentManager.removeEntity(entity);
-		_entityManager.destroyEntity(entity);
-	}
-
-	// Adds a component to the entity. Returns pointer to it or nullptr if inactive.
-	template <typename TComponent, typename... Args>
-	TComponent* addComponentImmediate(Entity entity, Args&&... args)
-	{
-#ifdef ORHESCYON_HIGH_CHECK
-		if (!_entityManager.isActive(entity))
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::AddComponentImmediate on inactive entity " << entity << std::endl;
-			return nullptr;
-		}
-#endif
-
-		TComponent* component = _componentManager.addComponent<TComponent>(entity, std::forward<Args>(args)...);
-
-		return component;
-	}
-
 	// Returns true if the entity has the component.
 	template <typename TComponent>
 	bool hasComponent(Entity entity)
@@ -148,39 +110,6 @@ public:
 		}
 #endif
 		return _componentManager.hasComponent<TComponent>(entity);
-	}
-
-	// Removes a component and auto-unsubscribes from systems whose requirements no longer match.
-	template <typename TComponent>
-	void removeComponentImmediate(Entity entity)
-	{
-#ifdef ORHESCYON_HIGH_CHECK
-		if (!_entityManager.isActive(entity))
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::RemoveComponentImmediate on inactive entity " << entity << std::endl;
-			return;
-		}
-#endif
-
-		_componentManager.removeComponent<TComponent>(entity);
-		for (auto& [name, sm] : _systemManagers)
-		{
-			sm.checkEntitySubscriptions(entity, *this);
-		}
-	}
-
-	// Returns pointer to the component or nullptr.
-	template <typename TComponent>
-	TComponent* getComponent(Entity entity)
-	{
-#ifdef ORHESCYON_HIGH_CHECK
-		if (!_entityManager.isActive(entity))
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::GetComponent on inactive entity " << entity << std::endl;
-			return nullptr;
-		}
-#endif
-		return _componentManager.getComponent<TComponent>(entity);
 	}
 
 	// Storage footprint of one component type — the data for choosing its StoragePolicy.
@@ -219,6 +148,12 @@ public:
 		return *sm;
 	}
 
+	// True if a SystemManager with this exact name exists.
+	bool hasSystemManager(std::string_view name) const
+	{
+		return _systemManagers.contains(std::string(name));
+	}
+
 	// Registers a new system; chain .before/.after/.reads/.writes on the returned registration.
 	template <typename TSystem, typename... Args>
 	SystemRegistration<TSystem> registerSystem(Args&&... args)
@@ -240,31 +175,6 @@ public:
 		_systemTypeToManager.insert_or_assign(std::type_index(typeid(TSystem)), smName);
 		sm->addSystem<TSystem>(*this, std::move(system));
 		return SystemRegistration<TSystem>(sm);
-	}
-
-	// Subscribes an entity to a system.
-	template <typename TSystem>
-	void subscribeEntityImmediate(Entity entity)
-	{
-#ifdef ORHESCYON_HIGH_CHECK
-		if (!_entityManager.isActive(entity))
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntityImmediate on inactive entity " << entity << std::endl;
-			return;
-		}
-#endif
-
-		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
-#ifdef ORHESCYON_HIGH_CHECK
-		if (it == _systemTypeToManager.end())
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntityImmediate: system " << typeid(TSystem).name()
-			          << " not registered in any SystemManager" << std::endl;
-			return;
-		}
-#endif
-		SystemManager* sm = findSystemManager(it->second);
-		sm->subscribe<TSystem>(entity, *this);
 	}
 
 	// Iterates entities subscribed to TSystem that also hold all TComponents.
@@ -313,31 +223,6 @@ public:
 		return sm->isSubscribed<TSystem>(entity);
 	}
 
-	// Unsubscribes an entity from a system.
-	template <typename TSystem>
-	void unsubscribeEntityImmediate(Entity entity)
-	{
-#ifdef ORHESCYON_HIGH_CHECK
-		if (!_entityManager.isActive(entity))
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntityImmediate on inactive entity " << entity << std::endl;
-			return;
-		}
-#endif
-
-		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
-#ifdef ORHESCYON_HIGH_CHECK
-		if (it == _systemTypeToManager.end())
-		{
-			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntityImmediate: system " << typeid(TSystem).name()
-			          << " not registered in any SystemManager" << std::endl;
-			return;
-		}
-#endif
-		SystemManager* sm = findSystemManager(it->second);
-		sm->unsubscribe<TSystem>(entity, *this);
-	}
-
 	// Updates SystemManager with the given name.
 	void update(std::string_view name)
 	{
@@ -349,6 +234,7 @@ public:
 		}
 #endif
 		sm->updateSystems(*this, *_jobSystem);
+		_deferredChangeQueue.flushDeferred(*this, name);
 	}
 
 	// Update default SystemManager.
@@ -374,6 +260,140 @@ public:
 		return _entityManager.isActive(entity);
 	}
 
+	// Maps a deferred handle to the entity produced by the flush that consumed its creation.
+	Entity resolveEntity(DeferredEntity handle) const
+	{
+		return _deferredChangeQueue.resolveEntity(handle);
+	}
+
+	// ---- Immediate structural changes ----
+
+	// Creates a new entity and marks it active.
+	Entity createEntityImmediate()
+	{
+		Entity entity = _entityManager.createEntity();
+		return entity;
+	}
+
+	// Unsubscribes from systems, removes components, then frees the slot.
+	void destroyEntityImmediate(Entity entity)
+	{
+#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::DestroyEntityImmediate on inactive entity " << entity << std::endl;
+			return;
+		}
+#endif
+
+		for (auto& [name, sm] : _systemManagers)
+		{
+			sm.unsubscribeFromAll(entity, *this);
+		}
+		_componentManager.removeEntity(entity);
+		_entityManager.destroyEntity(entity);
+	}
+
+	// Adds a component to the entity. Returns pointer to it or nullptr if inactive.
+	template <typename TComponent, typename... Args>
+	TComponent* addComponentImmediate(Entity entity, Args&&... args)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::AddComponentImmediate on inactive entity " << entity << std::endl;
+			return nullptr;
+		}
+#endif
+
+		TComponent* component = _componentManager.addComponent<TComponent>(entity, std::forward<Args>(args)...);
+
+		return component;
+	}
+
+	// Removes a component and auto-unsubscribes from systems whose requirements no longer match.
+	template <typename TComponent>
+	void removeComponentImmediate(Entity entity)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::RemoveComponentImmediate on inactive entity " << entity << std::endl;
+			return;
+		}
+#endif
+
+		_componentManager.removeComponent<TComponent>(entity);
+		for (auto& [name, sm] : _systemManagers)
+		{
+			sm.checkEntitySubscriptions(entity, *this);
+		}
+	}
+
+	// Returns pointer to the component or nullptr.
+	template <typename TComponent>
+	TComponent* getComponent(Entity entity)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::GetComponent on inactive entity " << entity << std::endl;
+			return nullptr;
+		}
+#endif
+		return _componentManager.getComponent<TComponent>(entity);
+	}
+
+	// Subscribes an entity to a system.
+	template <typename TSystem>
+	void subscribeEntityImmediate(Entity entity)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntityImmediate on inactive entity " << entity << std::endl;
+			return;
+		}
+#endif
+
+		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
+#ifdef ORHESCYON_HIGH_CHECK
+		if (it == _systemTypeToManager.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::SubscribeEntityImmediate: system " << typeid(TSystem).name()
+			          << " not registered in any SystemManager" << std::endl;
+			return;
+		}
+#endif
+		SystemManager* sm = findSystemManager(it->second);
+		sm->subscribe<TSystem>(entity, *this);
+	}
+
+	// Unsubscribes an entity from a system.
+	template <typename TSystem>
+	void unsubscribeEntityImmediate(Entity entity)
+	{
+#ifdef ORHESCYON_HIGH_CHECK
+		if (!_entityManager.isActive(entity))
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntityImmediate on inactive entity " << entity << std::endl;
+			return;
+		}
+#endif
+
+		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
+#ifdef ORHESCYON_HIGH_CHECK
+		if (it == _systemTypeToManager.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::UnsubscribeEntityImmediate: system " << typeid(TSystem).name()
+			          << " not registered in any SystemManager" << std::endl;
+			return;
+		}
+#endif
+		SystemManager* sm = findSystemManager(it->second);
+		sm->unsubscribe<TSystem>(entity, *this);
+	}
+
 	// Registers a context — a named entity for global resource access.
 	template <typename TContext>
 	void registerContext(Entity ctx)
@@ -393,5 +413,74 @@ public:
 	{
 		return _componentManager.getComponent<TComponent>(_contextManager.getContext<TContext>());
 	}
+
+	// ---- Deferred structural changes ----
+	// Commands are applied after the named SystemManager finishes its update.
+
+	DeferredEntity createEntityDeferred(std::string_view smName)
+	{
+		return _deferredChangeQueue.createEntity(*this, smName);
+	}
+
+	void destroyEntityDeferred(Entity entity, std::string_view smName)
+	{
+		_deferredChangeQueue.destroyEntity(*this, entity, smName);
+	}
+
+	void destroyEntityDeferred(DeferredEntity handle, std::string_view smName)
+	{
+		_deferredChangeQueue.destroyEntity(*this, handle, smName);
+	}
+
+	template <typename TComponent, typename... Args>
+	void addComponentDeferred(Entity entity, Args&&... args)
+	{
+		_deferredChangeQueue.addComponent<TComponent>(*this, entity, std::forward<Args>(args)...);
+	}
+
+	template <typename TComponent, typename... Args>
+	void addComponentDeferred(DeferredEntity handle, Args&&... args)
+	{
+		_deferredChangeQueue.addComponent<TComponent>(*this, handle, std::forward<Args>(args)...);
+	}
+
+	template <typename TComponent>
+	void removeComponentDeferred(Entity entity, std::string_view smName)
+	{
+		_deferredChangeQueue.removeComponent<TComponent>(*this, entity, smName);
+	}
+
+	template <typename TComponent>
+	void removeComponentDeferred(DeferredEntity handle, std::string_view smName)
+	{
+		_deferredChangeQueue.removeComponent<TComponent>(*this, handle, smName);
+	}
+
+	template <typename TSystem>
+	void subscribeEntityDeferred(Entity entity, std::string_view smName)
+	{
+		_deferredChangeQueue.subscribeEntity<TSystem>(*this, entity, smName);
+	}
+
+	template <typename TSystem>
+	void subscribeEntityDeferred(DeferredEntity handle, std::string_view smName)
+	{
+		_deferredChangeQueue.subscribeEntity<TSystem>(*this, handle, smName);
+	}
+
+	template <typename TSystem>
+	void unsubscribeEntityDeferred(Entity entity, std::string_view smName)
+	{
+		_deferredChangeQueue.unsubscribeEntity<TSystem>(*this, entity, smName);
+	}
+
+	template <typename TSystem>
+	void unsubscribeEntityDeferred(DeferredEntity handle, std::string_view smName)
+	{
+		_deferredChangeQueue.unsubscribeEntity<TSystem>(*this, handle, smName);
+	}
 };
 } // namespace Orhescyon
+
+// Out-of-line bodies;
+#include "Deferred/DeferredChangeQueueImpl.hpp"

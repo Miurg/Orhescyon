@@ -18,6 +18,7 @@ add_executable(orhescyon-tests
         SparseComponentStorageTests.cpp
         ComponentManagerTests.cpp
         GMEntitiesTests.cpp
+        GMDeferredTests.cpp
         EntityManagerTests.cpp
         GMComponentTests.cpp
         GMSystemTests.cpp
