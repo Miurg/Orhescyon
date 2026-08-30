@@ -261,7 +261,7 @@ public:
 	}
 
 	// Maps a deferred handle to the entity produced by the flush that consumed its creation.
-	Entity resolveEntity(DeferredEntity handle) const
+	Entity resolveEntity(const DeferredEntityHandle& handle) const
 	{
 		return _deferredChangeQueue.resolveEntity(handle);
 	}
@@ -417,7 +417,7 @@ public:
 	// ---- Deferred structural changes ----
 	// Commands are applied after the named SystemManager finishes its update.
 
-	DeferredEntity createEntityDeferred(std::string_view smName)
+	DeferredEntityHandle createEntityDeferred(std::string_view smName)
 	{
 		return _deferredChangeQueue.createEntity(*this, smName);
 	}
@@ -427,7 +427,7 @@ public:
 		_deferredChangeQueue.destroyEntity(*this, entity, smName);
 	}
 
-	void destroyEntityDeferred(DeferredEntity handle, std::string_view smName)
+	void destroyEntityDeferred(const DeferredEntityHandle& handle, std::string_view smName)
 	{
 		_deferredChangeQueue.destroyEntity(*this, handle, smName);
 	}
@@ -439,7 +439,7 @@ public:
 	}
 
 	template <typename TComponent, typename... Args>
-	void addComponentDeferred(DeferredEntity handle, Args&&... args)
+	void addComponentDeferred(const DeferredEntityHandle& handle, Args&&... args)
 	{
 		_deferredChangeQueue.addComponent<TComponent>(*this, handle, std::forward<Args>(args)...);
 	}
@@ -451,7 +451,7 @@ public:
 	}
 
 	template <typename TComponent>
-	void removeComponentDeferred(DeferredEntity handle, std::string_view smName)
+	void removeComponentDeferred(const DeferredEntityHandle& handle, std::string_view smName)
 	{
 		_deferredChangeQueue.removeComponent<TComponent>(*this, handle, smName);
 	}
@@ -463,7 +463,7 @@ public:
 	}
 
 	template <typename TSystem>
-	void subscribeEntityDeferred(DeferredEntity handle, std::string_view smName)
+	void subscribeEntityDeferred(const DeferredEntityHandle& handle, std::string_view smName)
 	{
 		_deferredChangeQueue.subscribeEntity<TSystem>(*this, handle, smName);
 	}
@@ -475,7 +475,7 @@ public:
 	}
 
 	template <typename TSystem>
-	void unsubscribeEntityDeferred(DeferredEntity handle, std::string_view smName)
+	void unsubscribeEntityDeferred(const DeferredEntityHandle& handle, std::string_view smName)
 	{
 		_deferredChangeQueue.unsubscribeEntity<TSystem>(*this, handle, smName);
 	}

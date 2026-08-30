@@ -3,7 +3,9 @@
 #include <Orhescyon/GeneralManager.hpp>
 #include <Orhescyon/Systems/SystemCore.hpp>
 
+#include <atomic>
 #include <memory>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -56,7 +58,7 @@ class ParallelSpawnerSystem : public SystemCore<ParallelSpawnerSystem<TId>>
 {
 public:
     static constexpr int spawnCount = 128;
-    inline static std::vector<DeferredEntity> handles;
+    inline static std::vector<DeferredEntityHandle> handles;
 
     std::string_view getSystemManagerName() const override { return "game"; }
 
@@ -76,7 +78,7 @@ TEST(GeneralManagerDeferred, CreateIsInvisibleUntilUpdate)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
 
     EXPECT_EQ(gm.activeEntityCount(), 0u);
     EXPECT_EQ(gm.resolveEntity(handle), Entity::invalid());
@@ -119,7 +121,7 @@ TEST(GeneralManagerDeferred, AddComponentByTokenAppliesAtUpdateEnd)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.update("game");
     Entity entity = gm.resolveEntity(handle);
 
@@ -168,7 +170,7 @@ TEST(GeneralManagerDeferred, CommandsByTokenApplyInRecordOrder)
 {
     GeneralManager gm;
     gm.registerSystemManager("game");
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.update("game");
     Entity entity = gm.resolveEntity(handle);
 
@@ -191,7 +193,7 @@ TEST(GeneralManagerDeferred, TokenChainCreateAddSubscribe)
     gm.registerSystemManager("game");
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.addComponentDeferred<Position>(handle, 1.f, 2.f, "game");
     gm.addComponentDeferred<Velocity>(handle, 3.f, 4.f, "game");
     gm.subscribeEntityDeferred<MovementSystem>(handle, "game");
@@ -212,8 +214,8 @@ TEST(GeneralManagerDeferred, QueuesAreIndependentPerSystemManager)
     gm.registerSystemManager("first");
     gm.registerSystemManager("second");
 
-    DeferredEntity a = gm.createEntityDeferred("first");
-    DeferredEntity b = gm.createEntityDeferred("second");
+    DeferredEntityHandle a = gm.createEntityDeferred("first");
+    DeferredEntityHandle b = gm.createEntityDeferred("second");
 
     gm.update("second");
     EXPECT_FALSE(gm.isActive(gm.resolveEntity(a)));
@@ -228,7 +230,7 @@ TEST(GeneralManagerDeferred, StaleTargetSkipsAndQueueContinues)
     GeneralManager gm;
     gm.registerSystemManager("game");
     Entity doomed = gm.createEntityImmediate();
-    DeferredEntity fresh = gm.createEntityDeferred("game");
+    DeferredEntityHandle fresh = gm.createEntityDeferred("game");
 
     gm.destroyEntityDeferred(doomed, "game");
     gm.addComponentDeferred<Ammo>(doomed, 9, "game");
@@ -248,7 +250,7 @@ TEST(GeneralManagerDeferred, DestroyByTokenAppliesAtUpdateEnd)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.update("game");
     Entity e = gm.resolveEntity(handle);
     ASSERT_TRUE(gm.isActive(e));
@@ -267,7 +269,7 @@ TEST(GeneralManagerDeferred, CreateAndDestroyByTokenInSameBatch)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.destroyEntityDeferred(handle, "game");
 
     gm.update("game");
@@ -283,7 +285,7 @@ TEST(GeneralManagerDeferred, RemoveComponentByTokenAppliesAtUpdateEnd)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.addComponentDeferred<Ammo>(handle, 5, "game");
     gm.update("game");
 
@@ -320,7 +322,7 @@ TEST(GeneralManagerDeferred, SubscribeByTokenAppliesAtUpdateEnd)
     gm.registerSystemManager("game");
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.addComponentDeferred<Position>(handle, 1.f, 2.f, "game");
     gm.addComponentDeferred<Velocity>(handle, 3.f, 4.f, "game");
     gm.update("game");
@@ -339,7 +341,7 @@ TEST(GeneralManagerDeferred, UnsubscribeByTokenAppliesAtUpdateEnd)
     gm.registerSystemManager("game");
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.addComponentDeferred<Position>(handle, 1.f, 2.f, "game");
     gm.addComponentDeferred<Velocity>(handle, 3.f, 4.f, "game");
     gm.subscribeEntityDeferred<MovementSystem>(handle, "game");
@@ -360,7 +362,7 @@ TEST(GeneralManagerDeferred, UnknownSystemManagerDropsCreation)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity orphan = gm.createEntityDeferred("missing");
+    DeferredEntityHandle orphan = gm.createEntityDeferred("missing");
     gm.registerSystemManager("missing");
     gm.update("missing");
 
@@ -410,11 +412,11 @@ TEST(GeneralManagerDeferred, UnknownSystemManagerDropsTokenCommands)
     gm.registerSystemManager("game");
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    DeferredEntity destroyTarget = gm.createEntityDeferred("game");
-    DeferredEntity addTarget = gm.createEntityDeferred("game");
-    DeferredEntity removeTarget = gm.createEntityDeferred("game");
-    DeferredEntity subscribeTarget = gm.createEntityDeferred("game");
-    DeferredEntity unsubscribeTarget = gm.createEntityDeferred("game");
+    DeferredEntityHandle destroyTarget = gm.createEntityDeferred("game");
+    DeferredEntityHandle addTarget = gm.createEntityDeferred("game");
+    DeferredEntityHandle removeTarget = gm.createEntityDeferred("game");
+    DeferredEntityHandle subscribeTarget = gm.createEntityDeferred("game");
+    DeferredEntityHandle unsubscribeTarget = gm.createEntityDeferred("game");
     gm.update("game");
 
     Entity destroyEntity = gm.resolveEntity(destroyTarget);
@@ -476,7 +478,7 @@ TEST(GeneralManagerDeferred, ForeignTokenCommandsAreSkippedAndQueueContinues)
     gm.registerSystemManager("game");
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    DeferredEntity foreign{12345};
+    DeferredEntityHandle foreign;
     Entity survivor = gm.createEntityImmediate();
 
     gm.destroyEntityDeferred(foreign, "game");
@@ -498,7 +500,7 @@ TEST(GeneralManagerDeferred, CrossManagerCommandBeforeCreationIsSkipped)
     gm.registerSystemManager("first");
     gm.registerSystemManager("second");
 
-    DeferredEntity handle = gm.createEntityDeferred("first");
+    DeferredEntityHandle handle = gm.createEntityDeferred("first");
     gm.addComponentDeferred<Ammo>(handle, 1, "second");
 
     gm.update("second");
@@ -548,7 +550,7 @@ TEST(GeneralManagerDeferred, DeferredCallFromTokenFlushCallbackWaitsNextUpdate)
     gm.registerSystemManager("game");
     gm.registerSystem<SpawnerSystem>(false);
 
-    DeferredEntity host = gm.createEntityDeferred("game");
+    DeferredEntityHandle host = gm.createEntityDeferred("game");
     gm.subscribeEntityDeferred<SpawnerSystem>(host, "game");
 
     gm.update("game");
@@ -583,7 +585,7 @@ TEST(GeneralManagerDeferred, RemoveRequiredComponentByTokenAutoUnsubscribesAtFlu
     gm.registerSystemManager("game");
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.addComponentDeferred<Position>(handle, 0.f, 0.f, "game");
     gm.addComponentDeferred<Velocity>(handle, 0.f, 0.f, "game");
     gm.subscribeEntityDeferred<MovementSystem>(handle, "game");
@@ -621,14 +623,14 @@ TEST(GeneralManagerDeferred, ForeignHandleResolvesInvalid)
 {
     GeneralManager gm;
 
-    EXPECT_EQ(gm.resolveEntity(DeferredEntity{12345}), Entity::invalid());
+    EXPECT_EQ(gm.resolveEntity(DeferredEntityHandle{}), Entity::invalid());
 }
 
 TEST(GeneralManagerDeferred, DefaultManagerFlushesOnParameterlessUpdate)
 {
     GeneralManager gm;
 
-    DeferredEntity handle = gm.createEntityDeferred("default");
+    DeferredEntityHandle handle = gm.createEntityDeferred("default");
     gm.update();
 
     EXPECT_EQ(gm.activeEntityCount(), 1u);
@@ -640,7 +642,7 @@ TEST(GeneralManagerDeferred, FlushedCommandsAreNotAppliedAgain)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.update("game");
 
     Entity resolved = gm.resolveEntity(handle);
@@ -658,7 +660,7 @@ TEST(GeneralManagerDeferred, StaleTokenDoesNotTargetRecycledSlot)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.update("game");
     Entity stale = gm.resolveEntity(handle);
 
@@ -720,7 +722,7 @@ TEST(GeneralManagerDeferred, AddComponentByTokenSupportsNoConstructorArguments)
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.addComponentDeferred<Marker>(handle, "game");
     gm.update("game");
 
@@ -749,7 +751,7 @@ TEST(GeneralManagerDeferred, AddComponentByTokenOwnsMoveOnlyArgumentsUntilFlush)
 {
     GeneralManager gm;
     gm.registerSystemManager("game");
-    DeferredEntity handle = gm.createEntityDeferred("game");
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
     gm.update("game");
 
     auto value = std::make_unique<int>(42);
@@ -782,18 +784,19 @@ TEST(GeneralManagerDeferred, ParallelSystemsKeepAllDeferredCommandsAndTokens)
     constexpr std::size_t expectedCount = FirstSpawner::spawnCount + SecondSpawner::spawnCount;
     EXPECT_EQ(gm.activeEntityCount(), expectedCount);
 
-    std::unordered_set<uint64_t> tokenIds;
-    for (const std::vector<DeferredEntity>* handles : {&FirstSpawner::handles, &SecondSpawner::handles})
+    std::unordered_set<Entity> resolvedEntities;
+    for (const std::vector<DeferredEntityHandle>* handles : {&FirstSpawner::handles, &SecondSpawner::handles})
     {
         ASSERT_EQ(handles->size(), FirstSpawner::spawnCount);
-        for (DeferredEntity handle : *handles)
+        for (DeferredEntityHandle handle : *handles)
         {
-            EXPECT_NE(handle.id, 0u);
-            EXPECT_TRUE(tokenIds.insert(handle.id).second);
-            EXPECT_TRUE(gm.isActive(gm.resolveEntity(handle)));
+            Entity resolved = gm.resolveEntity(handle);
+            EXPECT_NE(resolved, Entity::invalid());
+            EXPECT_TRUE(resolvedEntities.insert(resolved).second);
+            EXPECT_TRUE(gm.isActive(resolved));
         }
     }
-    EXPECT_EQ(tokenIds.size(), expectedCount);
+    EXPECT_EQ(resolvedEntities.size(), expectedCount);
 }
 
 namespace
@@ -812,7 +815,7 @@ DeterminismSnapshot runDeterminismScript()
     GeneralManager gm;
     gm.registerSystemManager("game");
 
-    std::vector<DeferredEntity> handles;
+    std::vector<DeferredEntityHandle> handles;
     for (int i = 0; i < 6; ++i)
     {
         handles.push_back(gm.createEntityDeferred("game"));
@@ -827,7 +830,7 @@ DeterminismSnapshot runDeterminismScript()
     gm.update("game");
 
     DeterminismSnapshot snapshot;
-    for (DeferredEntity handle : handles)
+    for (DeferredEntityHandle handle : handles)
     {
         Entity resolved = gm.resolveEntity(handle);
         snapshot.resolved.push_back(resolved);
@@ -851,6 +854,126 @@ TEST(GeneralManagerDeferred, SameScriptProducesIdenticalState)
 
     std::unordered_set<Entity> uniqueEntities(first.resolved.begin(), first.resolved.end());
     EXPECT_EQ(uniqueEntities.size(), 6u);
+}
+
+TEST(GeneralManagerDeferred, HandleCopiesAndMovesResolveTheSameEntity)
+{
+    GeneralManager gm;
+    gm.registerSystemManager("game");
+
+    DeferredEntityHandle original = gm.createEntityDeferred("game");
+    DeferredEntityHandle copied(original);
+    DeferredEntityHandle copyAssigned;
+    copyAssigned = original;
+    DeferredEntityHandle moved(std::move(copied));
+    DeferredEntityHandle moveAssigned;
+    moveAssigned = std::move(copyAssigned);
+
+    EXPECT_EQ(gm.resolveEntity(copied), Entity::invalid());
+    EXPECT_EQ(gm.resolveEntity(copyAssigned), Entity::invalid());
+
+    gm.update("game");
+
+    Entity resolved = gm.resolveEntity(original);
+    ASSERT_NE(resolved, Entity::invalid());
+    EXPECT_EQ(gm.resolveEntity(moved), resolved);
+    EXPECT_EQ(gm.resolveEntity(moveAssigned), resolved);
+}
+
+TEST(GeneralManagerDeferred, ExecutedCommandsReleaseTheirReferencesWithoutInvalidatingHandles)
+{
+    GeneralManager gm;
+    gm.registerSystemManager("game");
+
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
+    gm.addComponentDeferred<Ammo>(handle, 17, "game");
+    gm.update("game");
+
+    DeferredEntityHandle remaining = handle;
+    handle = {};
+
+    Entity resolved = gm.resolveEntity(remaining);
+    ASSERT_NE(resolved, Entity::invalid());
+    ASSERT_NE(gm.getComponent<Ammo>(resolved), nullptr);
+    EXPECT_EQ(gm.getComponent<Ammo>(resolved)->count, 17);
+}
+
+TEST(GeneralManagerDeferred, QueueDestructionReleasesPendingCommandReferences)
+{
+    DeferredEntityHandle survivingHandle;
+
+    {
+        GeneralManager gm;
+        gm.registerSystemManager("game");
+
+        survivingHandle = gm.createEntityDeferred("game");
+        gm.addComponentDeferred<Ammo>(survivingHandle, 23, "game");
+    }
+
+    DeferredEntityHandle copiedAfterQueueDestruction = survivingHandle;
+    survivingHandle = {};
+    copiedAfterQueueDestruction = {};
+}
+
+TEST(GeneralManagerDeferred, MultipleHandlesAndCommandsKeepOneDeferredEntityAlive)
+{
+    GeneralManager gm;
+    gm.registerSystemManager("game");
+
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
+    std::vector<DeferredEntityHandle> copies(8, handle);
+
+    gm.addComponentDeferred<Ammo>(handle, 1, "game");
+    gm.addComponentDeferred<Ammo>(copies[0], 2, "game");
+    gm.addComponentDeferred<Ammo>(copies[1], 3, "game");
+    gm.update("game");
+
+    copies.clear();
+
+    Entity resolved = gm.resolveEntity(handle);
+    ASSERT_NE(resolved, Entity::invalid());
+    ASSERT_NE(gm.getComponent<Ammo>(resolved), nullptr);
+    EXPECT_EQ(gm.getComponent<Ammo>(resolved)->count, 3);
+}
+
+TEST(GeneralManagerDeferred, ResolveEntityCanReadWhileCreationCommandPublishesEntity)
+{
+    GeneralManager gm;
+    gm.registerSystemManager("game");
+
+    DeferredEntityHandle handle = gm.createEntityDeferred("game");
+    std::atomic_bool readerStarted{false};
+    std::atomic_bool stopReader{false};
+    std::atomic_bool sawResolvedEntity{false};
+
+    std::thread reader([&]
+    {
+        readerStarted.store(true, std::memory_order_release);
+        while (!stopReader.load(std::memory_order_acquire))
+        {
+            if (gm.resolveEntity(handle) != Entity::invalid())
+            {
+                sawResolvedEntity.store(true, std::memory_order_relaxed);
+            }
+        }
+
+        if (gm.resolveEntity(handle) != Entity::invalid())
+        {
+            sawResolvedEntity.store(true, std::memory_order_relaxed);
+        }
+    });
+
+    while (!readerStarted.load(std::memory_order_acquire))
+    {
+        std::this_thread::yield();
+    }
+
+    gm.update("game");
+    stopReader.store(true, std::memory_order_release);
+    reader.join();
+
+    EXPECT_TRUE(sawResolvedEntity.load(std::memory_order_relaxed));
+    EXPECT_NE(gm.resolveEntity(handle), Entity::invalid());
 }
 
 } // namespace

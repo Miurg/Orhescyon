@@ -19,11 +19,11 @@ inline void DeferredChangeQueue::flushDeferred(GeneralManager& gm, std::string_v
 
 	for (DeferredCommand& command : batch)
 	{
-		command.apply(gm);
+		command.execute(gm);
 	}
 }
 
-inline DeferredEntity DeferredChangeQueue::createEntity(GeneralManager& gm, std::string_view smName)
+inline DeferredEntityHandle DeferredChangeQueue::createEntity(GeneralManager& gm, std::string_view smName)
 {
 #if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
@@ -35,11 +35,12 @@ inline DeferredEntity DeferredChangeQueue::createEntity(GeneralManager& gm, std:
 #endif
 
 	std::scoped_lock lock(_mutex);
-	const uint64_t tokenId = _nextDeferredEntityId++;
+	auto handle = DeferredEntityHandle(new DeferredEntity);
+	DeferredEntity* deferredEntity = handle._entity;
 	deferredQueue(smName).push_back(
-	    DeferredCommand{DeferredOpKind::CreateEntity, [this, tokenId](GeneralManager& gm)
-	                    { _deferredEntities.emplace(tokenId, gm.createEntityImmediate()); }});
-	return {tokenId};
+	    DeferredCommand{DeferredOpKind::CreateEntity, deferredEntity, [deferredEntity](GeneralManager& gm)
+	                    { deferredEntity->entity = gm.createEntityImmediate(); }});
+	return handle;
 }
 
 inline void DeferredChangeQueue::destroyEntity(GeneralManager& gm, Entity entity, std::string_view smName)
@@ -57,7 +58,8 @@ inline void DeferredChangeQueue::destroyEntity(GeneralManager& gm, Entity entity
 	                                                { gm.destroyEntityImmediate(entity); }});
 }
 
-inline void DeferredChangeQueue::destroyEntity(GeneralManager& gm, DeferredEntity handle, std::string_view smName)
+inline void DeferredChangeQueue::destroyEntity(GeneralManager& gm, const DeferredEntityHandle& handle,
+                                               std::string_view smName)
 {
 #if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
@@ -68,13 +70,14 @@ inline void DeferredChangeQueue::destroyEntity(GeneralManager& gm, DeferredEntit
 	}
 #endif
 	std::scoped_lock lock(_mutex);
-	const uint64_t tokenId = handle.id;
-	deferredQueue(smName).push_back(DeferredCommand{DeferredOpKind::DestroyEntity, [this, tokenId](GeneralManager& gm)
-	                                                {
-		                                                Entity target = resolveDeferredToken(tokenId, "DestroyEntity");
-		                                                if (target == Entity::invalid()) return;
-		                                                gm.destroyEntityImmediate(target);
-	                                                }});
+	DeferredEntity* deferredEntity = handle._entity;
+	deferredQueue(smName).push_back(
+	    DeferredCommand{DeferredOpKind::DestroyEntity, deferredEntity, [this, deferredEntity](GeneralManager& gm)
+	                    {
+		                    Entity target = resolveDeferredEntity(deferredEntity, "DestroyEntity");
+		                    if (target == Entity::invalid()) return;
+		                    gm.destroyEntityImmediate(target);
+	                    }});
 }
 
 template <typename TComponent, typename... Args>
@@ -108,7 +111,7 @@ void DeferredChangeQueue::addComponent(GeneralManager& gm, Entity entity, Args&&
 }
 
 template <typename TComponent, typename... Args>
-void DeferredChangeQueue::addComponent(GeneralManager& gm, DeferredEntity handle, Args&&... args)
+void DeferredChangeQueue::addComponent(GeneralManager& gm, const DeferredEntityHandle& handle, Args&&... args)
 {
 	static_assert(sizeof...(Args) >= 1, "addComponent requires the SystemManager name as its last argument");
 
@@ -125,10 +128,10 @@ void DeferredChangeQueue::addComponent(GeneralManager& gm, DeferredEntity handle
 	}
 #endif
 
-	const uint64_t tokenId = handle.id;
-	auto lambda = [this, tokenId, componentArgs = tupleWithoutLast(std::move(ownedArgs))](GeneralManager& gm) mutable
+	DeferredEntity* deferredEntity = handle._entity;
+	auto lambda = [this, deferredEntity, componentArgs = tupleWithoutLast(std::move(ownedArgs))](GeneralManager& gm) mutable
 	{
-		Entity target = resolveDeferredToken(tokenId, "AddComponent");
+		Entity target = resolveDeferredEntity(deferredEntity, "AddComponent");
 		if (target == Entity::invalid()) return;
 		std::apply([target, &gm](auto&&... unpacked)
 		           { gm.addComponentImmediate<TComponent>(target, std::move(unpacked)...); }, std::move(componentArgs));
@@ -136,7 +139,7 @@ void DeferredChangeQueue::addComponent(GeneralManager& gm, DeferredEntity handle
 	auto task = std::make_shared<decltype(lambda)>(std::move(lambda));
 	std::scoped_lock lock(_mutex);
 	deferredQueue(smName).push_back(
-	    DeferredCommand{DeferredOpKind::AddComponent, [task](GeneralManager& gm) { (*task)(gm); }});
+	    DeferredCommand{DeferredOpKind::AddComponent, deferredEntity, [task](GeneralManager& gm) { (*task)(gm); }});
 }
 
 template <typename TComponent>
@@ -156,7 +159,8 @@ void DeferredChangeQueue::removeComponent(GeneralManager& gm, Entity entity, std
 }
 
 template <typename TComponent>
-void DeferredChangeQueue::removeComponent(GeneralManager& gm, DeferredEntity handle, std::string_view smName)
+void DeferredChangeQueue::removeComponent(GeneralManager& gm, const DeferredEntityHandle& handle,
+                                          std::string_view smName)
 {
 #if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
@@ -167,13 +171,14 @@ void DeferredChangeQueue::removeComponent(GeneralManager& gm, DeferredEntity han
 	}
 #endif
 	std::scoped_lock lock(_mutex);
-	const uint64_t tokenId = handle.id;
-	deferredQueue(smName).push_back(DeferredCommand{DeferredOpKind::RemoveComponent, [this, tokenId](GeneralManager& gm)
-	                                                {
-		                                                Entity target = resolveDeferredToken(tokenId, "RemoveComponent");
-		                                                if (target == Entity::invalid()) return;
-		                                                gm.removeComponentImmediate<TComponent>(target);
-	                                                }});
+	DeferredEntity* deferredEntity = handle._entity;
+	deferredQueue(smName).push_back(
+	    DeferredCommand{DeferredOpKind::RemoveComponent, deferredEntity, [this, deferredEntity](GeneralManager& gm)
+	                    {
+		                    Entity target = resolveDeferredEntity(deferredEntity, "RemoveComponent");
+		                    if (target == Entity::invalid()) return;
+		                    gm.removeComponentImmediate<TComponent>(target);
+	                    }});
 }
 
 template <typename TSystem>
@@ -193,7 +198,8 @@ void DeferredChangeQueue::subscribeEntity(GeneralManager& gm, Entity entity, std
 }
 
 template <typename TSystem>
-void DeferredChangeQueue::subscribeEntity(GeneralManager& gm, DeferredEntity handle, std::string_view smName)
+void DeferredChangeQueue::subscribeEntity(GeneralManager& gm, const DeferredEntityHandle& handle,
+                                          std::string_view smName)
 {
 #if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
@@ -204,13 +210,14 @@ void DeferredChangeQueue::subscribeEntity(GeneralManager& gm, DeferredEntity han
 	}
 #endif
 	std::scoped_lock lock(_mutex);
-	const uint64_t tokenId = handle.id;
-	deferredQueue(smName).push_back(DeferredCommand{DeferredOpKind::SubscribeEntity, [this, tokenId](GeneralManager& gm)
-	                                                {
-		                                                Entity target = resolveDeferredToken(tokenId, "SubscribeEntity");
-		                                                if (target == Entity::invalid()) return;
-		                                                gm.subscribeEntityImmediate<TSystem>(target);
-	                                                }});
+	DeferredEntity* deferredEntity = handle._entity;
+	deferredQueue(smName).push_back(
+	    DeferredCommand{DeferredOpKind::SubscribeEntity, deferredEntity, [this, deferredEntity](GeneralManager& gm)
+	                    {
+		                    Entity target = resolveDeferredEntity(deferredEntity, "SubscribeEntity");
+		                    if (target == Entity::invalid()) return;
+		                    gm.subscribeEntityImmediate<TSystem>(target);
+	                    }});
 }
 
 template <typename TSystem>
@@ -230,7 +237,8 @@ void DeferredChangeQueue::unsubscribeEntity(GeneralManager& gm, Entity entity, s
 }
 
 template <typename TSystem>
-void DeferredChangeQueue::unsubscribeEntity(GeneralManager& gm, DeferredEntity handle, std::string_view smName)
+void DeferredChangeQueue::unsubscribeEntity(GeneralManager& gm, const DeferredEntityHandle& handle,
+                                            std::string_view smName)
 {
 #if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
@@ -241,11 +249,11 @@ void DeferredChangeQueue::unsubscribeEntity(GeneralManager& gm, DeferredEntity h
 	}
 #endif
 	std::scoped_lock lock(_mutex);
-	const uint64_t tokenId = handle.id;
+	DeferredEntity* deferredEntity = handle._entity;
 	deferredQueue(smName).push_back(
-	    DeferredCommand{DeferredOpKind::UnsubscribeEntity, [this, tokenId](GeneralManager& gm)
+	    DeferredCommand{DeferredOpKind::UnsubscribeEntity, deferredEntity, [this, deferredEntity](GeneralManager& gm)
 	                    {
-		                    Entity target = resolveDeferredToken(tokenId, "UnsubscribeEntity");
+		                    Entity target = resolveDeferredEntity(deferredEntity, "UnsubscribeEntity");
 		                    if (target == Entity::invalid()) return;
 		                    gm.unsubscribeEntityImmediate<TSystem>(target);
 	                    }});
