@@ -178,7 +178,7 @@ public:
 	}
 
 	// Iterates entities subscribed to TSystem that also hold all TComponents.
-	// Structural changes are forbidden inside func.
+	// Entity creation is allowed inside func; other structural changes are forbidden.
 	template <typename TSystem, typename... TComponents, typename TFunc>
 	void forEachSubscribedEntityWith(TFunc&& func)
 	{
@@ -260,20 +260,14 @@ public:
 		return _entityManager.isActive(entity);
 	}
 
-	// Maps a deferred handle to the entity produced by the flush that consumed its creation.
-	Entity resolveEntity(const DeferredEntityHandle& handle) const
-	{
-		return _deferredChangeQueue.resolveEntity(handle);
-	}
-
-	// ---- Immediate structural changes ----
-
 	// Creates a new entity and marks it active.
-	Entity createEntityImmediate()
+	Entity createEntity()
 	{
 		Entity entity = _entityManager.createEntity();
 		return entity;
 	}
+
+	// ---- Immediate structural changes ----
 
 	// Unsubscribes from systems, removes components, then frees the slot.
 	void destroyEntityImmediate(Entity entity)
@@ -417,19 +411,9 @@ public:
 	// ---- Deferred structural changes ----
 	// Commands are applied after the named SystemManager finishes its update.
 
-	DeferredEntityHandle createEntityDeferred(std::string_view smName)
-	{
-		return _deferredChangeQueue.createEntity(*this, smName);
-	}
-
 	void destroyEntityDeferred(Entity entity, std::string_view smName)
 	{
 		_deferredChangeQueue.destroyEntity(*this, entity, smName);
-	}
-
-	void destroyEntityDeferred(const DeferredEntityHandle& handle, std::string_view smName)
-	{
-		_deferredChangeQueue.destroyEntity(*this, handle, smName);
 	}
 
 	template <typename TComponent, typename... Args>
@@ -438,22 +422,10 @@ public:
 		_deferredChangeQueue.addComponent<TComponent>(*this, entity, std::forward<Args>(args)...);
 	}
 
-	template <typename TComponent, typename... Args>
-	void addComponentDeferred(const DeferredEntityHandle& handle, Args&&... args)
-	{
-		_deferredChangeQueue.addComponent<TComponent>(*this, handle, std::forward<Args>(args)...);
-	}
-
 	template <typename TComponent>
 	void removeComponentDeferred(Entity entity, std::string_view smName)
 	{
 		_deferredChangeQueue.removeComponent<TComponent>(*this, entity, smName);
-	}
-
-	template <typename TComponent>
-	void removeComponentDeferred(const DeferredEntityHandle& handle, std::string_view smName)
-	{
-		_deferredChangeQueue.removeComponent<TComponent>(*this, handle, smName);
 	}
 
 	template <typename TSystem>
@@ -463,22 +435,11 @@ public:
 	}
 
 	template <typename TSystem>
-	void subscribeEntityDeferred(const DeferredEntityHandle& handle, std::string_view smName)
-	{
-		_deferredChangeQueue.subscribeEntity<TSystem>(*this, handle, smName);
-	}
-
-	template <typename TSystem>
 	void unsubscribeEntityDeferred(Entity entity, std::string_view smName)
 	{
 		_deferredChangeQueue.unsubscribeEntity<TSystem>(*this, entity, smName);
 	}
 
-	template <typename TSystem>
-	void unsubscribeEntityDeferred(const DeferredEntityHandle& handle, std::string_view smName)
-	{
-		_deferredChangeQueue.unsubscribeEntity<TSystem>(*this, handle, smName);
-	}
 };
 } // namespace Orhescyon
 

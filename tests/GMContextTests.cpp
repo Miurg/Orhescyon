@@ -15,7 +15,7 @@ struct GameConfig {};
 TEST(GeneralManager, RegisterAndGetContext)
 {
     GeneralManager gm;
-    Entity cfg = gm.createEntityImmediate();
+    Entity cfg = gm.createEntity();
     gm.addComponentImmediate<Health>(cfg, 999);
     gm.registerContext<GameConfig>(cfg);
 
@@ -26,7 +26,7 @@ TEST(GeneralManager, RegisterAndGetContext)
 TEST(GeneralManager, GetContextComponent)
 {
     GeneralManager gm;
-    Entity cfg = gm.createEntityImmediate();
+    Entity cfg = gm.createEntity();
     gm.addComponentImmediate<Health>(cfg, 42);
     gm.registerContext<GameConfig>(cfg);
 

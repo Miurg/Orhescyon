@@ -237,7 +237,7 @@ TEST(MultiManager, SubscribeRoutedByPriorRegistration)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<MMPos>(e);
     gm.addComponentImmediate<MMVel>(e);
     gm.subscribeEntityImmediate<PhysMove>(e);
@@ -255,7 +255,7 @@ TEST(MultiManager, UnsubscribeRoutedByPriorRegistration)
     gm.registerSystemManager("physics");
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<MMPos>(e);
     gm.addComponentImmediate<MMVel>(e);
     gm.subscribeEntityImmediate<PhysMove>(e);
@@ -268,7 +268,7 @@ TEST(MultiManager, UnsubscribeRoutedByPriorRegistration)
 TEST(MultiManager, SubscribeBeforeRegisterWarnsNoCrash)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<MMPos>(e);
     gm.addComponentImmediate<MMVel>(e);
 
@@ -287,7 +287,7 @@ TEST(MultiManager, DestroyEntityUnsubscribesFromAllManagers)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<MMPos>(e);
     gm.addComponentImmediate<MMVel>(e);
     gm.addComponentImmediate<MMHealth>(e);
@@ -309,7 +309,7 @@ TEST(MultiManager, DestroyEntityNotSubscribedAnywhereIsSafe)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     EXPECT_NO_THROW(gm.destroyEntityImmediate(e));
 }
 
@@ -325,7 +325,7 @@ TEST(MultiManager, RemoveComponentAutoUnsubscribesCorrectManager)
     gm.registerSystem<PhysMove>().writes<MMPos>().reads<MMVel>();
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<MMPos>(e);
     gm.addComponentImmediate<MMVel>(e);
     gm.addComponentImmediate<MMHealth>(e);

@@ -81,7 +81,7 @@ int main()
     GeneralManager gm;
     gm.registerSystem<MovementSystem>();
 
-    Entity entity = gm.createEntityImmediate();
+    Entity entity = gm.createEntity();
     gm.addComponentImmediate<Position>(entity, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(entity, 1.0f, 0.5f);
     gm.subscribeEntityImmediate<MovementSystem>(entity);
@@ -104,9 +104,8 @@ gm.forEachSubscribedEntityWith<MovementSystem, Position, const NavigationAgent>(
     [](Entity entity, Position& position, const NavigationAgent& agent) { /* ... */ });
 ```
 
-Structural changes are forbidden inside the iteration lambda: no `createEntityImmediate`/`destroyEntityImmediate`,
-no `addComponentImmediate`/`removeComponentImmediate` — they mutate the bitmaps and blocks being iterated.
-Reading and writing component data is what the lambda is for.
+`createEntity` is allowed inside the iteration lambda. Other structural changes are forbidden there.
+
 
 ## Storage policies
 

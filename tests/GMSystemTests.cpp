@@ -64,7 +64,7 @@ TEST(GeneralManager, SubscribeEntityToSystem)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 1.0f);
 
@@ -76,7 +76,7 @@ TEST(GeneralManager, SubscribeWithoutRequiredComponentFails)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
 
     EXPECT_NO_THROW(gm.subscribeEntityImmediate<MovementSystem>(e));
 }
@@ -86,7 +86,7 @@ TEST(GeneralManager, UnsubscribeEntity)
     GeneralManager gm;
     gm.registerSystem<HealthSystem>().writes<Health>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Health>(e, 50);
     gm.subscribeEntityImmediate<HealthSystem>(e);
 
@@ -98,7 +98,7 @@ TEST(GeneralManager, DestroyEntityUnsubscribesFromSystems)
     GeneralManager gm;
     gm.registerSystem<HealthSystem>().writes<Health>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Health>(e, 50);
     gm.subscribeEntityImmediate<HealthSystem>(e);
 
@@ -110,7 +110,7 @@ TEST(GeneralManager, RemoveRequiredComponentAutoUnsubscribes)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
     gm.subscribeEntityImmediate<MovementSystem>(e);
@@ -123,7 +123,7 @@ TEST(GeneralManager, IsSubscribedToReturnsFalseBeforeSubscribe)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
 
@@ -135,7 +135,7 @@ TEST(GeneralManager, IsSubscribedToReturnsTrueAfterSubscribe)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
     gm.subscribeEntityImmediate<MovementSystem>(e);
@@ -148,7 +148,7 @@ TEST(GeneralManager, IsSubscribedToReturnsFalseAfterUnsubscribe)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
     gm.subscribeEntityImmediate<MovementSystem>(e);
@@ -162,7 +162,7 @@ TEST(GeneralManager, IsSubscribedToReturnsFalseAfterAutoUnsubscribe)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
     gm.subscribeEntityImmediate<MovementSystem>(e);
@@ -176,7 +176,7 @@ TEST(GeneralManager, IsSubscribedToOnInactiveEntityReturnsFalse)
     GeneralManager gm;
     gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
     gm.subscribeEntityImmediate<MovementSystem>(e);
@@ -189,7 +189,7 @@ TEST(GeneralManager, IsSubscribedToUnregisteredSystemReturnsFalse)
 {
     GeneralManager gm;
 
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
 

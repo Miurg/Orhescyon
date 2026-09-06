@@ -13,7 +13,7 @@ struct Health { int value; };
 TEST(GeneralManager, AddAndGetComponent)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 3.0f, 4.0f);
 
     Position* p = gm.getComponent<Position>(e);
@@ -25,7 +25,7 @@ TEST(GeneralManager, AddAndGetComponent)
 TEST(GeneralManager, GetMissingComponentReturnsNull)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
 
     EXPECT_EQ(gm.getComponent<Position>(e), nullptr);
 }
@@ -33,7 +33,7 @@ TEST(GeneralManager, GetMissingComponentReturnsNull)
 TEST(GeneralManager, AddComponentToInactiveReturnsNull)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.destroyEntityImmediate(e);
 
     EXPECT_EQ(gm.addComponentImmediate<Position>(e, 0.0f, 0.0f), nullptr);
@@ -42,7 +42,7 @@ TEST(GeneralManager, AddComponentToInactiveReturnsNull)
 TEST(GeneralManager, RemoveComponent)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
     gm.removeComponentImmediate<Position>(e);
 
@@ -52,7 +52,7 @@ TEST(GeneralManager, RemoveComponent)
 TEST(GeneralManager, DestroyEntityClearsComponents)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
     gm.addComponentImmediate<Health>(e, 100);
     gm.destroyEntityImmediate(e);
@@ -65,7 +65,7 @@ TEST(GeneralManager, DestroyEntityClearsComponents)
 TEST(GeneralManager, HasComponentReturnsFalseWhenMissing)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
 
     EXPECT_FALSE(gm.hasComponent<Position>(e));
 }
@@ -73,7 +73,7 @@ TEST(GeneralManager, HasComponentReturnsFalseWhenMissing)
 TEST(GeneralManager, HasComponentReturnsTrueAfterAdd)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
 
     EXPECT_TRUE(gm.hasComponent<Position>(e));
@@ -82,7 +82,7 @@ TEST(GeneralManager, HasComponentReturnsTrueAfterAdd)
 TEST(GeneralManager, HasComponentReturnsFalseAfterRemove)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
     gm.removeComponentImmediate<Position>(e);
 
@@ -92,7 +92,7 @@ TEST(GeneralManager, HasComponentReturnsFalseAfterRemove)
 TEST(GeneralManager, HasComponentOnInactiveEntityReturnsFalse)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<Position>(e, 1.0f, 2.0f);
     gm.destroyEntityImmediate(e);
 
@@ -102,12 +102,12 @@ TEST(GeneralManager, HasComponentOnInactiveEntityReturnsFalse)
 TEST(GeneralManager, RecycledSlotHasNoStaleComponents)
 {
     GeneralManager gm;
-    Entity first = gm.createEntityImmediate();
+    Entity first = gm.createEntity();
     gm.addComponentImmediate<Position>(first, 1.0f, 2.0f);
     gm.addComponentImmediate<Health>(first, 100);
     gm.destroyEntityImmediate(first);
 
-    Entity second = gm.createEntityImmediate();
+    Entity second = gm.createEntity();
     ASSERT_EQ(second.slot, first.slot);
 
     EXPECT_FALSE(gm.hasComponent<Position>(second));
@@ -137,7 +137,7 @@ TEST(GeneralManager, DestroyEntityDestroysComponents)
 {
     TrackedResource::aliveCount = 0;
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.addComponentImmediate<TrackedResource>(e, 5);
     EXPECT_EQ(TrackedResource::aliveCount, 1);
 
@@ -150,7 +150,7 @@ TEST(GeneralManager, ManagerDestructionDestroysComponents)
     TrackedResource::aliveCount = 0;
     {
         GeneralManager gm;
-        Entity e = gm.createEntityImmediate();
+        Entity e = gm.createEntity();
         gm.addComponentImmediate<TrackedResource>(e, 5);
         EXPECT_EQ(TrackedResource::aliveCount, 1);
     }

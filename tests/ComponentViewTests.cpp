@@ -50,7 +50,7 @@ public:
 
 Entity makeSubscribedEntity(GeneralManager& gm, float x, float dx)
 {
-    Entity entity = gm.createEntityImmediate();
+    Entity entity = gm.createEntity();
     gm.addComponentImmediate<ViewPosition>(entity, x, 0.0f);
     gm.addComponentImmediate<ViewVelocity>(entity, dx, 0.0f);
     gm.subscribeEntityImmediate<ViewMovementSystem>(entity);
@@ -65,7 +65,7 @@ TEST(ComponentView, VisitsOnlySubscribedEntities)
 
     Entity subscribed = makeSubscribedEntity(gm, 1.0f, 0.0f);
 
-    Entity unsubscribed = gm.createEntityImmediate();
+    Entity unsubscribed = gm.createEntity();
     gm.addComponentImmediate<ViewPosition>(unsubscribed, 2.0f, 0.0f);
     gm.addComponentImmediate<ViewVelocity>(unsubscribed, 0.0f, 0.0f);
 
@@ -203,7 +203,7 @@ TEST(ComponentView, ReconstructedEntityMatchesHandle)
     // Recycle a slot a few times so the live entity has a non-zero generation
     for (int i = 0; i < 3; ++i)
     {
-        gm.destroyEntityImmediate(gm.createEntityImmediate());
+        gm.destroyEntityImmediate(gm.createEntity());
     }
     Entity entity = makeSubscribedEntity(gm, 1.0f, 0.0f);
     ASSERT_GT(entity.generation, 0u);
@@ -233,12 +233,12 @@ TEST(ComponentView, CrtpHelperDrivesSystemUpdate)
     GeneralManager gm;
     gm.registerSystem<IntegrationSystem>().writes<ViewPosition>().reads<ViewVelocity>();
 
-    Entity first = gm.createEntityImmediate();
+    Entity first = gm.createEntity();
     gm.addComponentImmediate<ViewPosition>(first, 0.0f, 0.0f);
     gm.addComponentImmediate<ViewVelocity>(first, 1.0f, 0.0f);
     gm.subscribeEntityImmediate<IntegrationSystem>(first);
 
-    Entity second = gm.createEntityImmediate();
+    Entity second = gm.createEntity();
     gm.addComponentImmediate<ViewPosition>(second, 10.0f, 0.0f);
     gm.addComponentImmediate<ViewVelocity>(second, -2.0f, 0.0f);
     gm.subscribeEntityImmediate<IntegrationSystem>(second);

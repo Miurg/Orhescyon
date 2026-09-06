@@ -10,7 +10,7 @@ using namespace Orhescyon;
 TEST(GeneralManager, CreateEntityIsActive)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
 
     EXPECT_TRUE(gm.isActive(e));
 }
@@ -18,8 +18,8 @@ TEST(GeneralManager, CreateEntityIsActive)
 TEST(GeneralManager, CreateEntitiesAreUnique)
 {
     GeneralManager gm;
-    Entity a = gm.createEntityImmediate();
-    Entity b = gm.createEntityImmediate();
+    Entity a = gm.createEntity();
+    Entity b = gm.createEntity();
 
     EXPECT_NE(a, b);
 }
@@ -27,7 +27,7 @@ TEST(GeneralManager, CreateEntitiesAreUnique)
 TEST(GeneralManager, DestroyEntityDeactivates)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.destroyEntityImmediate(e);
 
     EXPECT_FALSE(gm.isActive(e));
@@ -36,7 +36,7 @@ TEST(GeneralManager, DestroyEntityDeactivates)
 TEST(GeneralManager, DestroyInactiveEntityIsSafe)
 {
     GeneralManager gm;
-    Entity e = gm.createEntityImmediate();
+    Entity e = gm.createEntity();
     gm.destroyEntityImmediate(e);
 
     EXPECT_NO_THROW(gm.destroyEntityImmediate(e));
@@ -45,9 +45,9 @@ TEST(GeneralManager, DestroyInactiveEntityIsSafe)
 TEST(GeneralManager, DestroyedSlotIsRecycledWithNewGeneration)
 {
     GeneralManager gm;
-    Entity first = gm.createEntityImmediate();
+    Entity first = gm.createEntity();
     gm.destroyEntityImmediate(first);
-    Entity second = gm.createEntityImmediate();
+    Entity second = gm.createEntity();
 
     EXPECT_EQ(second.slot, first.slot);
     EXPECT_NE(second, first);
@@ -58,9 +58,9 @@ TEST(GeneralManager, DestroyedSlotIsRecycledWithNewGeneration)
 TEST(GeneralManager, DestroyStaleHandleDoesNotAffectSlotOwner)
 {
     GeneralManager gm;
-    Entity first = gm.createEntityImmediate();
+    Entity first = gm.createEntity();
     gm.destroyEntityImmediate(first);
-    Entity second = gm.createEntityImmediate();
+    Entity second = gm.createEntity();
 
     // first is stale; destroying it again must not destroy second
     gm.destroyEntityImmediate(first);
@@ -71,9 +71,9 @@ TEST(GeneralManager, DestroyStaleHandleDoesNotAffectSlotOwner)
 TEST(GeneralManager, ForEachActiveEntityVisitsLiveEntities)
 {
     GeneralManager gm;
-    Entity a = gm.createEntityImmediate();
-    Entity b = gm.createEntityImmediate();
-    Entity c = gm.createEntityImmediate();
+    Entity a = gm.createEntity();
+    Entity b = gm.createEntity();
+    Entity c = gm.createEntity();
     gm.destroyEntityImmediate(b);
 
     std::vector<Entity> visited;

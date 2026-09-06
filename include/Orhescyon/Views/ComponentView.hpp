@@ -15,7 +15,7 @@
 namespace Orhescyon
 {
 // Word-level join of subscription bits with component presence bits.
-// Structural changes are forbidden inside func.
+// Entity creation is allowed inside func; other structural changes are forbidden.
 template <typename... TComponents, typename TFunc>
 void forEachSubscribedEntityJoin(const SlotBitmap& subscriptionBits, const EntityManager& entityManager,
                                  ComponentManager& componentManager, TFunc&& func)
