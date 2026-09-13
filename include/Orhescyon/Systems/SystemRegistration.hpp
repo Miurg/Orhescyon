@@ -1,7 +1,9 @@
 #pragma once
 
+#include <type_traits>
 #include <typeindex>
 
+#include "../Components/ComponentManager.hpp"
 #include "SystemManager.hpp"
 #include "SystemSchedulingMetadata.hpp"
 
@@ -12,6 +14,7 @@ template <typename TSystem>
 class SystemRegistration
 {
 	SystemManager* _systemManager;
+	ComponentManager& _componentManager;
 
 	SystemSchedulingMetadata* metadata()
 	{
@@ -22,7 +25,8 @@ class SystemRegistration
 	}
 
 public:
-	explicit SystemRegistration(SystemManager* systemManager) : _systemManager(systemManager) {}
+	explicit SystemRegistration(SystemManager* systemManager, ComponentManager& componentManager)
+	    : _systemManager(systemManager), _componentManager(componentManager) {}
 
 	template <typename... TSystems>
 	SystemRegistration& before()
@@ -51,6 +55,7 @@ public:
 	{
 		if (SystemSchedulingMetadata* target = metadata())
 		{
+			(_componentManager.getStorage<std::remove_const_t<TComponents>>(), ...);
 			(target->readComponents.emplace_back(typeid(TComponents)), ...);
 			_systemManager->markExecutionOrderDirty();
 		}
@@ -62,6 +67,7 @@ public:
 	{
 		if (SystemSchedulingMetadata* target = metadata())
 		{
+			(_componentManager.getStorage<std::remove_const_t<TComponents>>(), ...);
 			(target->writeComponents.emplace_back(typeid(TComponents)), ...);
 			_systemManager->markExecutionOrderDirty();
 		}

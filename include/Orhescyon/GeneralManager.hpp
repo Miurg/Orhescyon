@@ -169,12 +169,12 @@ public:
 		{
 			std::cerr << "WARNING::GENERAL_MANAGER::RegisterSystem: SystemManager \"" << smName
 			          << "\" not found. Register it first via registerSystemManager." << std::endl;
-			return SystemRegistration<TSystem>(nullptr);
+			return SystemRegistration<TSystem>(nullptr, _componentManager);
 		}
 #endif
 		_systemTypeToManager.insert_or_assign(std::type_index(typeid(TSystem)), smName);
 		sm->addSystem<TSystem>(*this, std::move(system));
-		return SystemRegistration<TSystem>(sm);
+		return SystemRegistration<TSystem>(sm, _componentManager);
 	}
 
 	// Iterates entities subscribed to TSystem that also hold all TComponents.
