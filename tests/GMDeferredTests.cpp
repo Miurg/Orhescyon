@@ -4,6 +4,7 @@
 #include <Orhescyon/Systems/SystemCore.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <unordered_set>
 #include <utility>
@@ -76,6 +77,33 @@ public:
             entities.push_back(entity);
             gm.addComponentDeferred<Marker>(entity, "game");
         }
+    }
+};
+
+template <int TId, typename... RequiredComponents>
+class LayerSystem : public SystemCore<LayerSystem<TId, RequiredComponents...>, RequiredComponents...>
+{
+    std::function<void(GeneralManager&)> _update;
+
+public:
+    explicit LayerSystem(std::function<void(GeneralManager&)> update) : _update(std::move(update)) {}
+
+    std::string_view getSystemManagerName() const override { return "game"; }
+
+    void update(GeneralManager& gm) override { _update(gm); }
+};
+
+class InlineJobSystem : public IJobSystem
+{
+public:
+    std::size_t callCount = 0;
+    std::size_t lastCount = 0;
+
+    void parallelFor(std::size_t count, const std::function<void(std::size_t)>& body) override
+    {
+        ++callCount;
+        lastCount = count;
+        for (std::size_t index = 0; index < count; ++index) body(index);
     }
 };
 
@@ -300,6 +328,108 @@ TEST(GeneralManagerDeferred, CreationFromSystemIsImmediateAndDeferredCommandsFlu
     ASSERT_NE(SpawnerSystem::spawned, Entity::invalid());
     EXPECT_TRUE(gm.isActive(SpawnerSystem::spawned));
     EXPECT_TRUE(gm.hasComponent<Marker>(SpawnerSystem::spawned));
+}
+
+TEST(GeneralManagerDeferred, StructuralChangesAreVisibleToFollowingLayers)
+{
+    using Producer = LayerSystem<0>;
+    using Consumer = LayerSystem<1, Marker>;
+    using Observer = LayerSystem<2, Marker>;
+
+    int consumerVisits = 0;
+    int observerVisits = 0;
+    bool observerUpdated = false;
+    GeneralManager gm;
+    gm.registerSystemManager("game");
+    Entity entity = gm.createEntity();
+
+    gm.registerSystem<Producer>([&](GeneralManager& manager) {
+        manager.addComponentDeferred<Marker>(entity, "game");
+        manager.subscribeEntityDeferred<Consumer>(entity, "game");
+        manager.subscribeEntityDeferred<Observer>(entity, "game");
+    }).writes<Marker>();
+    gm.registerSystem<Consumer>([&](GeneralManager& manager) {
+        manager.forEachSubscribedEntityWith<Consumer, Marker>([&](Entity current, Marker&) {
+            EXPECT_EQ(current, entity);
+            ++consumerVisits;
+            manager.removeComponentDeferred<Marker>(current, "game");
+        });
+    }).reads<Marker>().after<Producer>();
+    gm.registerSystem<Observer>([&](GeneralManager& manager) {
+        observerUpdated = true;
+        EXPECT_FALSE(manager.hasComponent<Marker>(entity));
+        EXPECT_FALSE(manager.isSubscribedTo<Consumer>(entity));
+        EXPECT_FALSE(manager.isSubscribedTo<Observer>(entity));
+        manager.forEachSubscribedEntityWith<Observer, Marker>([&](Entity, Marker&) { ++observerVisits; });
+    }).reads<Marker>().after<Consumer>();
+
+    gm.update("game");
+
+    EXPECT_EQ(consumerVisits, 1);
+    EXPECT_TRUE(observerUpdated);
+    EXPECT_EQ(observerVisits, 0);
+}
+
+TEST(GeneralManagerDeferred, ParallelLayerFlushesAfterAllSystemsFinish)
+{
+    using First = LayerSystem<0>;
+    using Second = LayerSystem<1>;
+    using Observer = LayerSystem<2>;
+
+    bool observerUpdated = false;
+    InlineJobSystem jobSystem;
+    GeneralManager gm(&jobSystem);
+    gm.registerSystemManager("game");
+    Entity first = gm.createEntity();
+    Entity second = gm.createEntity();
+
+    gm.registerSystem<First>([&](GeneralManager& manager) {
+        manager.addComponentDeferred<Marker>(first, "game");
+        EXPECT_FALSE(manager.hasComponent<Marker>(first));
+        EXPECT_FALSE(manager.hasComponent<Marker>(second));
+    });
+    gm.registerSystem<Second>([&](GeneralManager& manager) {
+        manager.addComponentDeferred<Marker>(second, "game");
+        EXPECT_FALSE(manager.hasComponent<Marker>(first));
+        EXPECT_FALSE(manager.hasComponent<Marker>(second));
+    });
+    gm.registerSystem<Observer>([&](GeneralManager& manager) {
+        observerUpdated = true;
+        EXPECT_TRUE(manager.hasComponent<Marker>(first));
+        EXPECT_TRUE(manager.hasComponent<Marker>(second));
+    }).reads<Marker>().after<First, Second>();
+
+    gm.update("game");
+
+    EXPECT_TRUE(observerUpdated);
+    EXPECT_EQ(jobSystem.callCount, 1u);
+    EXPECT_EQ(jobSystem.lastCount, 2u);
+}
+
+TEST(GeneralManagerDeferred, FlushCallbackCommandsApplyAfterFollowingLayer)
+{
+    using Second = LayerSystem<0>;
+    using Third = LayerSystem<1>;
+
+    SpawnerSystem::spawned = Entity::invalid();
+    std::vector<bool> markerVisible;
+    GeneralManager gm;
+    gm.registerSystemManager("game");
+    gm.registerSystem<SpawnerSystem>(false);
+
+    auto observe = [&](GeneralManager& manager) {
+        EXPECT_TRUE(manager.isActive(SpawnerSystem::spawned));
+        markerVisible.push_back(manager.hasComponent<Marker>(SpawnerSystem::spawned));
+    };
+    gm.registerSystem<Second>(observe).reads<Marker>().after<SpawnerSystem>();
+    gm.registerSystem<Third>(observe).reads<Marker>().after<Second>();
+
+    Entity host = gm.createEntity();
+    gm.subscribeEntityDeferred<SpawnerSystem>(host, "game");
+
+    gm.update("game");
+
+    EXPECT_EQ(markerVisible, (std::vector<bool>{false, true}));
 }
 
 TEST(GeneralManagerDeferred, CreationFromFlushCallbackIsImmediateAndDeferredCommandsWaitNextUpdate)

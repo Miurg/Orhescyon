@@ -9,9 +9,11 @@
 #include <vector>
 #include <queue>
 #include <set>
+#include <string_view>
 
 #include "ISystemCore.hpp"
 #include "SystemSchedulingMetadata.hpp"
+#include "../Deferred/DeferredChangeQueue.hpp"
 #include "../Entitys/SlotBitmap.hpp"
 #include "../Jobs/IJobSystem.hpp"
 
@@ -434,9 +436,16 @@ public:
 		_executionOrderDirty = false;
 	}
 
-	void updateSystems(GeneralManager& gm, IJobSystem& jobSystem)
+	void updateSystems(GeneralManager& gm, IJobSystem& jobSystem, DeferredChangeQueue& deferredChangeQueue,
+	                   std::string_view smName)
 	{
 		if (_executionOrderDirty) resolveExecutionSequence();
+
+		if (_executionLayers.empty())
+		{
+			deferredChangeQueue.flushDeferred(gm, smName);
+			return;
+		}
 
 		for (auto& layer : _executionLayers)
 		{
@@ -448,6 +457,7 @@ public:
 			{
 				jobSystem.parallelFor(layer.size(), [&layer, &gm](std::size_t index) { layer[index]->update(gm); });
 			}
+			deferredChangeQueue.flushDeferred(gm, smName);
 		}
 	}
 };

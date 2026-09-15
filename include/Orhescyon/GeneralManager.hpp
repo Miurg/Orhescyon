@@ -233,8 +233,7 @@ public:
 			throw std::runtime_error("GENERAL_MANAGER::update: no SystemManager named \"" + std::string(name) + "\"");
 		}
 #endif
-		sm->updateSystems(*this, *_jobSystem);
-		_deferredChangeQueue.flushDeferred(*this, name);
+		sm->updateSystems(*this, *_jobSystem, _deferredChangeQueue, name);
 	}
 
 	// Update default SystemManager.
@@ -409,7 +408,7 @@ public:
 	}
 
 	// ---- Deferred structural changes ----
-	// Commands are applied after the named SystemManager finishes its update.
+	// Commands are applied after each layer.
 
 	void destroyEntityDeferred(Entity entity, std::string_view smName)
 	{
