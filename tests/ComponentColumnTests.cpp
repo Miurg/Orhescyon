@@ -204,3 +204,29 @@ TEST(ComponentColumn, PresenceWordsExposeBits)
     EXPECT_EQ(column.presenceWord(100), 0u);
     EXPECT_GE(column.presenceWordCount(), 2u);
 }
+
+TEST(ComponentColumn, ExcessiveReservationThrowsWithoutChangingExistingComponents)
+{
+    if constexpr (sizeof(size_t) > sizeof(uint32_t))
+    {
+        ComponentColumn<ColumnPosition> column;
+        const Entity entity{7, 0};
+        ColumnPosition* pointer = column.addComponent(entity, ColumnPosition{1.0f, 2.0f});
+        const auto before = column.statistics();
+        const size_t excessiveSlots = static_cast<size_t>((uint64_t{1} << 32) + 1);
+        EXPECT_THROW(column.reserve(excessiveSlots), std::length_error);
+        EXPECT_EQ(column.getComponent(entity), pointer);
+        EXPECT_FLOAT_EQ(pointer->x, 1.0f);
+        EXPECT_FLOAT_EQ(pointer->y, 2.0f);
+        EXPECT_EQ(column.statistics().liveComponentCount, before.liveComponentCount);
+        EXPECT_EQ(column.statistics().allocatedBlockCount, before.allocatedBlockCount);
+        auto* added = column.addComponent(Entity{4096, 0}, ColumnPosition{3.0f, 4.0f});
+        ASSERT_NE(added, nullptr);
+        EXPECT_FLOAT_EQ(added->x, 3.0f);
+        EXPECT_EQ(column.size(), 2u);
+    }
+    else
+    {
+        GTEST_SKIP() << "size_t cannot represent a capacity above the entity index range";
+    }
+}

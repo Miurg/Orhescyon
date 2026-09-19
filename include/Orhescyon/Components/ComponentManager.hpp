@@ -1,9 +1,12 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <type_traits>
 #include <typeindex>
 #include <unordered_map>
+#include <vector>
 
 #include "../Entitys/Entity.hpp"
 #include "ComponentColumn.hpp"
@@ -25,6 +28,7 @@ public:
 	                       SparseComponentStorage<TComponent, ComponentStorageTraits<TComponent>::blockSize>>;
 
 private:
+	std::shared_mutex _registryMutex;
 	std::unordered_map<std::type_index, std::shared_ptr<void>> _componentStorages;
 	std::unordered_map<std::type_index, std::function<void(Entity)>> _removeCallbacks;
 
@@ -32,15 +36,35 @@ private:
 	StorageFor<TComponent>& getOrCreateStorage()
 	{
 		auto typeIndex = std::type_index(typeid(TComponent));
-		if (!_componentStorages.contains(typeIndex))
 		{
-			_componentStorages[typeIndex] = std::make_shared<StorageFor<TComponent>>();
-			_removeCallbacks[typeIndex] = [this](Entity entity)
+			std::shared_lock lock(_registryMutex);
+			auto it = _componentStorages.find(typeIndex);
+			if (it != _componentStorages.end())
 			{
-				getOrCreateStorage<TComponent>().removeComponent(entity);
-			};
+				return *std::static_pointer_cast<StorageFor<TComponent>>(it->second);
+			}
 		}
-		return *std::static_pointer_cast<StorageFor<TComponent>>(_componentStorages[typeIndex]);
+
+		std::unique_lock lock(_registryMutex);
+		auto it = _componentStorages.find(typeIndex);
+		if (it != _componentStorages.end())
+		{
+			return *std::static_pointer_cast<StorageFor<TComponent>>(it->second);
+		}
+
+		auto storage = std::make_shared<StorageFor<TComponent>>();
+		auto storageIt = _componentStorages.emplace(typeIndex, storage).first;
+		try
+		{
+			_removeCallbacks.emplace(typeIndex, [this](Entity entity)
+			                         { getOrCreateStorage<TComponent>().removeComponent(entity); });
+		}
+		catch (...)
+		{
+			_componentStorages.erase(storageIt);
+			throw;
+		}
+		return *storage;
 	}
 
 public:
@@ -53,9 +77,14 @@ public:
 	template <typename TComponent>
 	bool hasComponent(Entity entity)
 	{
-		auto it = _componentStorages.find(std::type_index(typeid(TComponent)));
-		if (it == _componentStorages.end()) return false;
-		return std::static_pointer_cast<StorageFor<TComponent>>(it->second)->hasComponent(entity);
+		StorageFor<TComponent>* storage;
+		{
+			std::shared_lock lock(_registryMutex);
+			auto it = _componentStorages.find(std::type_index(typeid(TComponent)));
+			if (it == _componentStorages.end()) return false;
+			storage = static_cast<StorageFor<TComponent>*>(it->second.get());
+		}
+		return storage->hasComponent(entity);
 	}
 
 	template <typename TComponent>
@@ -78,7 +107,16 @@ public:
 
 	void removeEntity(Entity entity)
 	{
-		for (auto& [type, callback] : _removeCallbacks)
+		std::vector<std::function<void(Entity)>> callbacks;
+		{
+			std::shared_lock lock(_registryMutex);
+			callbacks.reserve(_removeCallbacks.size());
+			for (const auto& [type, callback] : _removeCallbacks)
+			{
+				callbacks.push_back(callback);
+			}
+		}
+		for (auto& callback : callbacks)
 		{
 			callback(entity);
 		}

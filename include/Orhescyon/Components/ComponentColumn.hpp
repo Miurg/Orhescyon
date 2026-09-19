@@ -1,13 +1,15 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <bit>
 #include <cstdint>
 #include <memory>
 #include <new>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include "../Entitys/Entity.hpp"
 #include "../Entitys/SlotBitmap.hpp"
@@ -40,10 +42,38 @@ class ComponentColumn
 		}
 	};
 
-	std::vector<std::unique_ptr<Block>> _blocks; // indexed by slot >> BLOCK_SHIFT, entries may be null
+	struct BlockEntry
+	{
+		std::atomic<Block*> block{nullptr};
+		std::atomic<uint32_t> liveCount{0};
+	};
+
+	struct BlockTable
+	{
+		const uint32_t size;
+		std::unique_ptr<BlockEntry[]> entries;
+
+		explicit BlockTable(uint32_t blockCount)
+			: size(blockCount), entries(std::make_unique<BlockEntry[]>(blockCount))
+		{
+		}
+
+		~BlockTable()
+		{
+			for (uint32_t i = 0; i < size; ++i)
+			{
+				delete entries[i].block.load(std::memory_order_relaxed);
+			}
+		}
+	};
+
+	static_assert(std::atomic<BlockTable*>::is_always_lock_free && std::atomic<Block*>::is_always_lock_free
+		&& std::atomic<uint32_t>::is_always_lock_free,
+		"ComponentColumn requires lock-free pointer and integer atomics");
+
+	std::array<std::atomic<BlockTable*>, 33 - BLOCK_SHIFT> _blocks{};
 	SlotBitmap _presence;
-	std::vector<uint32_t> _blockLiveCounts;
-	uint32_t _liveCount = 0;
+	std::atomic<uint32_t> _liveCount{0};
 
 	// All tag instances are interchangeable, so every slot shares one address
 	static TComponent* sharedTagInstance() noexcept
@@ -52,37 +82,65 @@ class ComponentColumn
 		return &instance;
 	}
 
+	static uint32_t tableStart(uint32_t tableIndex) noexcept
+	{
+		return tableIndex == 0 ? 0 : uint32_t{1} << (tableIndex - 1);
+	}
+
+	BlockEntry& ensureBlockEntry(uint32_t blockIndex)
+	{
+		const uint32_t tableIndex = std::bit_width(blockIndex);
+		const uint32_t start = tableStart(tableIndex);
+		BlockTable* table = _blocks[tableIndex].load(std::memory_order_acquire);
+		if (!table)
+		{
+			auto candidate = std::make_unique<BlockTable>(tableIndex == 0 ? 1 : start);
+			if (_blocks[tableIndex].compare_exchange_strong(table, candidate.get(),
+				std::memory_order_acq_rel, std::memory_order_acquire))
+			{
+				table = candidate.release();
+			}
+		}
+		return table->entries[blockIndex - start];
+	}
+
+	BlockEntry& blockEntry(uint32_t blockIndex) const noexcept
+	{
+		const uint32_t tableIndex = std::bit_width(blockIndex);
+		BlockTable* table = _blocks[tableIndex].load(std::memory_order_acquire);
+		return table->entries[blockIndex - tableStart(tableIndex)];
+	}
+
 	// ensure that block by index exist and if not - create that block
 	Block& ensureBlock(uint32_t blockIndex)
 	{
-		if (blockIndex >= _blocks.size())
+		auto& entry = ensureBlockEntry(blockIndex).block;
+		Block* block = entry.load(std::memory_order_acquire);
+		if (!block)
 		{
-			_blocks.resize(std::max<size_t>(blockIndex + 1, _blocks.size() * 2));
+			auto candidate = std::make_unique<Block>();
+			if (entry.compare_exchange_strong(block, candidate.get(),
+				std::memory_order_acq_rel, std::memory_order_acquire))
+			{
+				block = candidate.release();
+			}
 		}
-		if (!_blocks[blockIndex])
-		{
-			_blocks[blockIndex] = std::make_unique<Block>();
-		}
-		return *_blocks[blockIndex];
+		return *block;
 	}
 
 	void markPresent(uint32_t slot)
 	{
+		BlockEntry& entry = ensureBlockEntry(slot >> BLOCK_SHIFT);
 		_presence.set(slot);
-		const uint32_t blockIndex = slot >> BLOCK_SHIFT;
-		if (blockIndex >= _blockLiveCounts.size())
-		{
-			_blockLiveCounts.resize(std::max<size_t>(blockIndex + 1, _blockLiveCounts.size() * 2), 0);
-		}
-		++_blockLiveCounts[blockIndex];
-		++_liveCount;
+		entry.liveCount.fetch_add(1, std::memory_order_relaxed);
+		_liveCount.fetch_add(1, std::memory_order_relaxed);
 	}
 
 	void markAbsent(uint32_t slot) noexcept
 	{
 		_presence.clear(slot);
-		--_blockLiveCounts[slot >> BLOCK_SHIFT];
-		--_liveCount;
+		blockEntry(slot >> BLOCK_SHIFT).liveCount.fetch_sub(1, std::memory_order_relaxed);
+		_liveCount.fetch_sub(1, std::memory_order_relaxed);
 	}
 
 public:
@@ -93,7 +151,11 @@ public:
 		if constexpr (STORES_DATA && !std::is_trivially_destructible_v<TComponent>)
 		{
 			_presence.forEachSetBit([this](uint32_t slot)
-			                        { _blocks[slot >> BLOCK_SHIFT]->pointerTo(slot & BLOCK_MASK)->~TComponent(); });
+			                        { componentPointerForSlot(slot)->~TComponent(); });
+		}
+		for (auto& table : _blocks)
+		{
+			delete table.load(std::memory_order_relaxed);
 		}
 	}
 
@@ -152,7 +214,7 @@ public:
 
 		if constexpr (STORES_DATA && !std::is_trivially_destructible_v<TComponent>)
 		{
-			_blocks[slot >> BLOCK_SHIFT]->pointerTo(slot & BLOCK_MASK)->~TComponent();
+			componentPointerForSlot(slot)->~TComponent();
 		}
 		markAbsent(slot);
 	}
@@ -166,7 +228,7 @@ public:
 		}
 		else
 		{
-			return _blocks[slot >> BLOCK_SHIFT]->pointerTo(slot & BLOCK_MASK);
+			return blockEntry(slot >> BLOCK_SHIFT).block.load(std::memory_order_acquire)->pointerTo(slot & BLOCK_MASK);
 		}
 	}
 
@@ -177,7 +239,7 @@ public:
 	[[nodiscard]] TComponent* componentRunPointer(uint32_t wordIndex) noexcept
 	{
 		const uint32_t slot = wordIndex << 6;
-		return _blocks[slot >> BLOCK_SHIFT]->pointerTo(slot & BLOCK_MASK);
+		return blockEntry(slot >> BLOCK_SHIFT).block.load(std::memory_order_acquire)->pointerTo(slot & BLOCK_MASK);
 	}
 
 	[[nodiscard]] uint64_t presenceWord(uint32_t wordIndex) const noexcept
@@ -192,30 +254,32 @@ public:
 
 	[[nodiscard]] size_t size() const noexcept
 	{
-		return _liveCount;
+		return _liveCount.load(std::memory_order_relaxed);
 	}
 
 	// Pre-allocates blocks and presence bits for slotCapacity slots.
 	void reserve(size_t slotCapacity)
 	{
-		_presence.reserveSlots(static_cast<uint32_t>(slotCapacity));
-		const size_t blocksNeeded = (slotCapacity + BlockSize - 1) / BlockSize;
-		if (blocksNeeded > _blockLiveCounts.size())
+		constexpr uint64_t maxSlotCapacity = uint64_t{1} << 32;
+		if (slotCapacity > maxSlotCapacity)
 		{
-			_blockLiveCounts.resize(blocksNeeded, 0);
+			throw std::length_error("ComponentColumn slot capacity exceeds index range");
 		}
+		_presence.reserveSlots(static_cast<uint32_t>(std::min<uint64_t>(slotCapacity, maxSlotCapacity - 1)));
+		const uint32_t blocksNeeded = static_cast<uint32_t>(slotCapacity / BlockSize + (slotCapacity % BlockSize != 0));
 		if constexpr (STORES_DATA)
 		{
-			if (blocksNeeded > _blocks.size())
+			for (uint32_t blockIndex = 0; blockIndex < blocksNeeded; ++blockIndex)
 			{
-				_blocks.resize(blocksNeeded);
+				ensureBlock(blockIndex);
 			}
-			for (size_t blockIndex = 0; blockIndex < blocksNeeded; ++blockIndex)
+		}
+		else if (blocksNeeded != 0)
+		{
+			const uint32_t lastTable = std::bit_width(blocksNeeded - 1);
+			for (uint32_t tableIndex = 0; tableIndex <= lastTable; ++tableIndex)
 			{
-				if (!_blocks[blockIndex])
-				{
-					_blocks[blockIndex] = std::make_unique<Block>();
-				}
+				ensureBlockEntry(tableStart(tableIndex));
 			}
 		}
 	}
@@ -223,17 +287,22 @@ public:
 	[[nodiscard]] StorageStatistics statistics() const noexcept
 	{
 		StorageStatistics stats;
-		stats.liveComponentCount = _liveCount;
+		stats.liveComponentCount = _liveCount.load(std::memory_order_relaxed);
 		stats.slotsPerBlock = BlockSize;
 		if constexpr (STORES_DATA)
 		{
-			for (const auto& block : _blocks)
+			for (const auto& entry : _blocks)
 			{
-				if (block) ++stats.allocatedBlockCount;
+				BlockTable* table = entry.load(std::memory_order_acquire);
+				if (!table) continue;
+				for (uint32_t i = 0; i < table->size; ++i)
+				{
+					if (table->entries[i].block.load(std::memory_order_acquire)) ++stats.allocatedBlockCount;
+				}
 			}
 			stats.allocatedComponentBytes =
 			    static_cast<size_t>(stats.allocatedBlockCount) * BlockSize * sizeof(TComponent);
-			stats.liveComponentBytes = static_cast<size_t>(_liveCount) * sizeof(TComponent);
+			stats.liveComponentBytes = static_cast<size_t>(stats.liveComponentCount) * sizeof(TComponent);
 		}
 		return stats;
 	}

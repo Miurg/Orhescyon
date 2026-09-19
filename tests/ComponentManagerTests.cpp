@@ -1,6 +1,13 @@
 #define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/Components/ComponentManager.hpp>
 #include <gtest/gtest.h>
+#include <array>
+#include <barrier>
+#include <cstddef>
+#include <memory>
+#include <thread>
+#include <utility>
+#include <vector>
 
 using namespace Orhescyon;
 
@@ -19,6 +26,28 @@ struct Name
 	std::string text;
 	int id;
 	Name(std::string t, int i) : text(std::move(t)), id(i) {}
+};
+
+template <std::size_t Index>
+struct RegistryComponent
+{
+	int value;
+};
+
+struct RegisterComponentOnDestruction
+{
+	ComponentManager& manager;
+	Entity target;
+
+	~RegisterComponentOnDestruction()
+	{
+		manager.addComponent<Health>(target, 42);
+	}
+};
+
+struct RemovalCallbackComponent
+{
+	std::unique_ptr<RegisterComponentOnDestruction> callback;
 };
 
 TEST(ComponentManager, AddAndGetComponent) 
@@ -110,6 +139,107 @@ TEST(ComponentManager, TypeIsolation)
 
 	// Adding Position should not mysteriously add Health
 	EXPECT_EQ(cm.getComponent<Health>(e1), nullptr);
+}
+
+TEST(ComponentManager, ConcurrentLookupReturnsSameStorage)
+{
+	constexpr std::size_t threadCount = 8;
+	ComponentManager cm;
+	std::array<ComponentManager::StorageFor<Position>*, threadCount> storages{};
+	std::barrier start(static_cast<std::ptrdiff_t>(threadCount));
+	std::vector<std::thread> workers;
+	workers.reserve(threadCount);
+
+	for (std::size_t threadIndex = 0; threadIndex < threadCount; ++threadIndex)
+	{
+		workers.emplace_back(
+		    [&, threadIndex]
+		    {
+			    start.arrive_and_wait();
+			    storages[threadIndex] = &cm.getStorage<Position>();
+		    });
+	}
+	for (std::thread& worker : workers) worker.join();
+
+	auto* expected = &cm.getStorage<Position>();
+	for (auto* storage : storages) EXPECT_EQ(storage, expected);
+
+	Entity entity{1, 0};
+	cm.addComponent<Position>(entity, Position{1.0f, 2.0f});
+	cm.removeEntity(entity);
+	EXPECT_FALSE(cm.hasComponent<Position>(entity));
+}
+
+TEST(ComponentManager, ConcurrentRegistrationPreservesComponents)
+{
+	constexpr std::size_t typeCount = 16;
+	ComponentManager cm;
+	Entity entity{1, 0};
+	cm.addComponent<Position>(entity, Position{1.0f, 2.0f});
+	std::array<bool, typeCount> validReads{};
+	std::barrier start(static_cast<std::ptrdiff_t>(typeCount));
+	std::vector<std::thread> workers;
+	workers.reserve(typeCount);
+
+	[&]<std::size_t... Index>(std::index_sequence<Index...>)
+	{
+		(workers.emplace_back(
+		     [&]
+		     {
+			     start.arrive_and_wait();
+			     auto* component = cm.addComponent<RegistryComponent<Index>>(entity, static_cast<int>(Index));
+			     bool valid = true;
+			     for (std::size_t pass = 0; pass < 64; ++pass)
+			     {
+				     valid &= cm.hasComponent<Position>(entity);
+				     valid &= cm.getComponent<RegistryComponent<Index>>(entity) == component;
+			     }
+			     validReads[Index] = valid;
+		     }), ...);
+	}(std::make_index_sequence<typeCount>{});
+	for (std::thread& worker : workers) worker.join();
+
+	for (bool valid : validReads) EXPECT_TRUE(valid);
+	auto checkComponent = [&]<std::size_t Index>()
+	{
+		auto* component = cm.getComponent<RegistryComponent<Index>>(entity);
+		ASSERT_NE(component, nullptr);
+		EXPECT_EQ(component->value, static_cast<int>(Index));
+	};
+	[&]<std::size_t... Index>(std::index_sequence<Index...>)
+	{
+		(checkComponent.template operator()<Index>(), ...);
+	}(std::make_index_sequence<typeCount>{});
+
+	cm.removeEntity(entity);
+	EXPECT_FALSE(cm.hasComponent<Position>(entity));
+	auto checkRemoved = [&]<std::size_t Index>()
+	{
+		EXPECT_FALSE(cm.hasComponent<RegistryComponent<Index>>(entity));
+	};
+	[&]<std::size_t... Index>(std::index_sequence<Index...>)
+	{
+		(checkRemoved.template operator()<Index>(), ...);
+	}(std::make_index_sequence<typeCount>{});
+}
+
+TEST(ComponentManager, RemovalCallbackCanRegisterStorage)
+{
+	ComponentManager cm;
+	Entity removed{1, 0};
+	Entity target{2, 0};
+	cm.addComponent<RemovalCallbackComponent>(
+	    removed, std::make_unique<RegisterComponentOnDestruction>(cm, target));
+
+	cm.removeEntity(removed);
+
+	EXPECT_FALSE(cm.hasComponent<RemovalCallbackComponent>(removed));
+	auto* health = cm.getComponent<Health>(target);
+	ASSERT_NE(health, nullptr);
+	EXPECT_EQ(health->value, 42);
+
+	cm.removeEntity(target);
+	EXPECT_FALSE(cm.hasComponent<Health>(target));
 }
 
 struct RareSparseComponent
