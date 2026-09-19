@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
 #include <utility>
@@ -49,6 +50,28 @@ private:
 	{
 		auto it = _systemManagers.find(std::string(name));
 		return it == _systemManagers.end() ? nullptr : &it->second;
+	}
+
+	// Prefer a trailing manager name to preserve existing calls with optional string fields.
+	template <typename TComponent, typename... Args>
+	static constexpr bool hasDeferredSystemManagerName()
+	{
+		if constexpr (sizeof...(Args) == 0)
+		{
+			return false;
+		}
+		else
+		{
+			using ArgsTuple = std::tuple<std::decay_t<Args>...>;
+			return []<std::size_t... I>(std::index_sequence<I...>)
+			{
+				return requires(ArgsTuple& args)
+				{
+					std::string(std::get<sizeof...(Args) - 1>(args));
+					TComponent{std::get<I>(std::move(args))...};
+				};
+			}(std::make_index_sequence<sizeof...(Args) - 1>{});
+		}
 	}
 
 public:
@@ -415,16 +438,34 @@ public:
 		_deferredChangeQueue.destroyEntity(*this, entity, smName);
 	}
 
+	void destroyEntityDeferred(Entity entity)
+	{
+		destroyEntityDeferred(entity, "default");
+	}
+
 	template <typename TComponent, typename... Args>
 	void addComponentDeferred(Entity entity, Args&&... args)
 	{
 		_deferredChangeQueue.addComponent<TComponent>(*this, entity, std::forward<Args>(args)...);
 	}
 
+	template <typename TComponent, typename... Args>
+		requires (!hasDeferredSystemManagerName<TComponent, Args...>())
+	void addComponentDeferred(Entity entity, Args&&... args)
+	{
+		_deferredChangeQueue.addComponent<TComponent>(*this, entity, std::forward<Args>(args)..., "default");
+	}
+
 	template <typename TComponent>
 	void removeComponentDeferred(Entity entity, std::string_view smName)
 	{
 		_deferredChangeQueue.removeComponent<TComponent>(*this, entity, smName);
+	}
+
+	template <typename TComponent>
+	void removeComponentDeferred(Entity entity)
+	{
+		removeComponentDeferred<TComponent>(entity, "default");
 	}
 
 	template <typename TSystem>
@@ -434,9 +475,21 @@ public:
 	}
 
 	template <typename TSystem>
+	void subscribeEntityDeferred(Entity entity)
+	{
+		subscribeEntityDeferred<TSystem>(entity, "default");
+	}
+
+	template <typename TSystem>
 	void unsubscribeEntityDeferred(Entity entity, std::string_view smName)
 	{
 		_deferredChangeQueue.unsubscribeEntity<TSystem>(*this, entity, smName);
+	}
+
+	template <typename TSystem>
+	void unsubscribeEntityDeferred(Entity entity)
+	{
+		unsubscribeEntityDeferred<TSystem>(entity, "default");
 	}
 
 };
