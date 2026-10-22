@@ -25,6 +25,12 @@ private:
 	}
 
 public:
+	EntityManager()
+	{
+		// first lock can race in mingw, so do it here before threads use it
+		std::unique_lock lock(_mutex);
+	}
+
 	Entity createEntity()
 	{
 		std::unique_lock lock(_mutex);

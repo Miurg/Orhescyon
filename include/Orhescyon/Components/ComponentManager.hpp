@@ -68,6 +68,12 @@ private:
 	}
 
 public:
+	ComponentManager()
+	{
+		// first lock can race in mingw, so do it here before threads use it
+		std::unique_lock lock(_registryMutex);
+	}
+
 	template <typename TComponent, typename... Args>
 	TComponent* addComponent(Entity entity, Args&&... args)
 	{
