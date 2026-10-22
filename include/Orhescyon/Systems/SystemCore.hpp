@@ -38,6 +38,12 @@ protected:
 		gm.forEachSubscribedEntityWith<Derived, RequiredComponents...>(std::forward<TFunc>(func));
 	}
 
+	template <typename TFunc>
+	void parallelForEachSubscribedEntity(GeneralManager& gm, TFunc&& func)
+	{
+		gm.parallelForEachSubscribedEntityWith<Derived, RequiredComponents...>(std::forward<TFunc>(func));
+	}
+
 public:
 	~SystemCore() override = default;
 

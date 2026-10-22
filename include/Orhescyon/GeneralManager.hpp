@@ -222,6 +222,26 @@ public:
 		                                            std::forward<TFunc>(func));
 	}
 
+	template <typename TSystem, typename... TComponents, typename TFunc>
+	void parallelForEachSubscribedEntityWith(TFunc&& func)
+	{
+		auto it = _systemTypeToManager.find(std::type_index(typeid(TSystem)));
+#ifdef ORHESCYON_HIGH_CHECK
+		if (it == _systemTypeToManager.end())
+		{
+			std::cerr << "WARNING::GENERAL_MANAGER::ParallelForEachSubscribedEntityWith: system " << typeid(TSystem).name()
+			          << " not registered in any SystemManager" << std::endl;
+			return;
+		}
+#endif
+		SystemManager* sm = findSystemManager(it->second);
+		const SlotBitmap* subscriptionBits = sm->subscriptionBitmap(typeid(TSystem));
+		if (!subscriptionBits) return;
+
+		parallelForEachSubscribedEntityJoin<TComponents...>(*subscriptionBits, _entityManager, _componentManager,
+		                                                    *_jobSystem, std::forward<TFunc>(func));
+	}
+
 	// Returns true if the entity is subscribed to the given system.
 	template <typename TSystem>
 	bool isSubscribedTo(Entity entity)

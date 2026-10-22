@@ -3,6 +3,7 @@
 #include <Orhescyon/Jobs/DefaultJobSystem.hpp>
 
 #include <atomic>
+#include <stdexcept>
 #include <vector>
 
 using namespace Orhescyon;
@@ -45,4 +46,36 @@ TEST(DefaultJobSystem, ParallelForOneCount_RunsOnce)
 
 	EXPECT_EQ(bodyCalls.load(), 1);
 	EXPECT_EQ(seenIndex.load(), 0u);
+}
+
+TEST(DefaultJobSystem, NestedParallelForCompletesWithOneWorker)
+{
+	DefaultJobSystem jobSystem(1);
+	std::atomic<int> bodyCalls{0};
+
+	jobSystem.parallelFor(4, [&](std::size_t)
+	{
+		jobSystem.parallelFor(7, [&](std::size_t)
+		{
+			jobSystem.parallelFor(3, [&](std::size_t) { bodyCalls.fetch_add(1); });
+		});
+	});
+
+	EXPECT_EQ(bodyCalls.load(), 84);
+}
+
+TEST(DefaultJobSystem, NestedParallelForPropagatesExceptions)
+{
+	DefaultJobSystem jobSystem(1);
+	EXPECT_THROW(jobSystem.parallelFor(1, [&](std::size_t)
+	{
+		jobSystem.parallelFor(1, [](std::size_t) { throw std::runtime_error("nested job failure"); });
+	}), std::runtime_error);
+
+	std::atomic<int> bodyCalls{0};
+	jobSystem.parallelFor(2, [&](std::size_t)
+	{
+		jobSystem.parallelFor(3, [&](std::size_t) { bodyCalls.fetch_add(1); });
+	});
+	EXPECT_EQ(bodyCalls.load(), 6);
 }

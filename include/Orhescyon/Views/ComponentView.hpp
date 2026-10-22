@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <tuple>
 #include <type_traits>
@@ -11,28 +12,32 @@
 #include "../Entitys/Entity.hpp"
 #include "../Entitys/EntityManager.hpp"
 #include "../Entitys/SlotBitmap.hpp"
+#include "../Jobs/IJobSystem.hpp"
 
 namespace Orhescyon
 {
-// Word-level join of subscription bits with component presence bits.
-// Entity creation is allowed inside func; other structural changes are forbidden.
-template <typename... TComponents, typename TFunc>
-void forEachSubscribedEntityJoin(const SlotBitmap& subscriptionBits, const EntityManager& entityManager,
-                                 ComponentManager& componentManager, TFunc&& func)
+namespace detail
+{
+template <typename TStorages>
+uint32_t subscribedEntityJoinWordCount(const SlotBitmap& subscriptionBits, const TStorages& storages)
+{
+	// just find minimum count storage
+	uint32_t wordCount = subscriptionBits.wordCount();
+	std::apply([&](auto*... storage) { ((wordCount = std::min(wordCount, storage->presenceWordCount())), ...); },
+	           storages);
+	return wordCount;
+}
+
+template <typename... TComponents, typename TStorages, typename TFunc>
+void forEachSubscribedEntityJoinWords(const SlotBitmap& subscriptionBits, const EntityManager& entityManager,
+                                    const TStorages& storages, uint32_t beginWord, uint32_t endWord, TFunc& func)
 {
 	// find if all components are column based and we dont have sparse
 	constexpr bool allContiguous =
 	    (ComponentManager::StorageFor<std::remove_const_t<TComponents>>::CONTIGUOUS_DATA && ...);
 
-	// gets poitners to components storages
-	auto storages = std::make_tuple(&componentManager.getStorage<std::remove_const_t<TComponents>>()...);
-
-	// just find minimum count storage
-	uint32_t wordCount = subscriptionBits.wordCount();
-	std::apply([&](auto*... storage) { ((wordCount = std::min(wordCount, storage->presenceWordCount())), ...); },
-	           storages);
-
-	for (uint32_t wordIndex = 0; wordIndex < wordCount; ++wordIndex)
+	// each call works only on its part of bitmap
+	for (uint32_t wordIndex = beginWord; wordIndex < endWord; ++wordIndex)
 	{
 		// one word = 64 bits, remember it
 		uint64_t combined = subscriptionBits.word(wordIndex);
@@ -53,11 +58,12 @@ void forEachSubscribedEntityJoin(const SlotBitmap& subscriptionBits, const Entit
 			// in case if all bits are 1
 			if (combined == ~uint64_t{0})
 			{
-				// whole word matches — walk contiguous runs
 				std::apply(
 				    [&](auto*... storage)
 				    {
+					    // get pointers to first components in this word
 					    auto runs = std::make_tuple(storage->componentRunPointer(wordIndex)...);
+					    // all bits are set, so no need to check them one by one
 					    for (uint32_t offset = 0; offset < 64; ++offset)
 					    {
 						    const uint32_t slot = baseSlot + offset;
@@ -89,6 +95,50 @@ void forEachSubscribedEntityJoin(const SlotBitmap& subscriptionBits, const Entit
 			    storages);
 		}
 	}
+}
+
+}
+
+template <typename... TComponents, typename TFunc>
+void forEachSubscribedEntityJoin(const SlotBitmap& subscriptionBits, const EntityManager& entityManager,
+                                 ComponentManager& componentManager, TFunc&& func)
+{
+	// poitners to components storages
+	auto storages = std::make_tuple(&componentManager.getStorage<std::remove_const_t<TComponents>>()...);
+
+	// how many words we need to check
+	const uint32_t wordCount = detail::subscribedEntityJoinWordCount(subscriptionBits, storages);
+
+	// go through all words, func can create entities but other structural changes must wait
+	detail::forEachSubscribedEntityJoinWords<TComponents...>(subscriptionBits, entityManager, storages, 0, wordCount,
+	                                                       func);
+}
+
+template <typename... TComponents, typename TFunc>
+void parallelForEachSubscribedEntityJoin(const SlotBitmap& subscriptionBits, const EntityManager& entityManager,
+                                        ComponentManager& componentManager, IJobSystem& jobSystem, TFunc&& func)
+{
+	// no subscribers == nothing to do
+	if (subscriptionBits.setBitCount() == 0) return;
+
+	// get storages once, jobs will use same pointers
+	auto storages = std::make_tuple(&componentManager.getStorage<std::remove_const_t<TComponents>>()...);
+
+	const uint32_t wordCount = detail::subscribedEntityJoinWordCount(subscriptionBits, storages);
+
+	// if some storage is empty then no entity can match
+	if (wordCount == 0) return;
+
+	// split by words, so each iteration gets its own 64 slots
+	// jobs use local storages by reference, so parallelFor must wait for all of them
+	jobSystem.parallelFor(wordCount,
+	                      [&](std::size_t index)
+	                      {
+		                      const uint32_t wordIndex = static_cast<uint32_t>(index);
+		                      // end is excluded, so +1 gives this iteration only one word
+		                      detail::forEachSubscribedEntityJoinWords<TComponents...>(
+		                          subscriptionBits, entityManager, storages, wordIndex, wordIndex + 1, func);
+	                      });
 }
 
 } // namespace Orhescyon
