@@ -1,6 +1,5 @@
 #pragma once
 
-#include <exception>
 #include <future>
 #include <utility>
 #include <vector>
@@ -44,21 +43,17 @@ public:
 	// Idempotent: clears futures on completion, second call is a no-op.
 	void wait()
 	{
-		std::exception_ptr first;
-		for (auto& f : _futures)
+		std::vector<std::future<void>> futures;
+		futures.swap(_futures);
+		// Wait for every task before an exception from get() can unwind the caller.
+		for (auto& f : futures)
 		{
-			if (!f.valid()) continue;
-			try
-			{
-				f.get();
-			}
-			catch (...)
-			{
-				if (!first) first = std::current_exception();
-			}
+			if (f.valid()) f.wait();
 		}
-		_futures.clear();
-		if (first) std::rethrow_exception(first);
+		for (auto& f : futures)
+		{
+			if (f.valid()) f.get();
+		}
 	}
 };
 

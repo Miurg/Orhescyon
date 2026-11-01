@@ -208,15 +208,20 @@ public:
 		}
 
 		T* slot = block->ptr(index & BLOCK_MASK);
-		try
+		// Return the reserved index if construction fails before the component becomes live.
+		struct SlotReservation
 		{
-			new (slot) T(std::move(value));
-		}
-		catch (...)
-		{
-			releaseIndex(index);
-			throw;
-		}
+			StablePool& pool;
+			uint32_t index;
+			bool committed = false;
+
+			~SlotReservation()
+			{
+				if (!committed) pool.releaseIndex(index);
+			}
+		} reservation{*this, index};
+		new (slot) T(std::move(value));
+		reservation.committed = true;
 
 		_liveCount.fetch_add(1, std::memory_order_relaxed);
 		return {index, slot};

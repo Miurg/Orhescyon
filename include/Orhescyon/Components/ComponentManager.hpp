@@ -28,9 +28,14 @@ public:
 	                       SparseComponentStorage<TComponent, ComponentStorageTraits<TComponent>::blockSize>>;
 
 private:
+	struct StorageEntry
+	{
+		std::shared_ptr<void> storage;
+		std::function<void(Entity)> remove;
+	};
+
 	std::shared_mutex _registryMutex;
-	std::unordered_map<std::type_index, std::shared_ptr<void>> _componentStorages;
-	std::unordered_map<std::type_index, std::function<void(Entity)>> _removeCallbacks;
+	std::unordered_map<std::type_index, StorageEntry> _componentStorages;
 
 	template <typename TComponent>
 	StorageFor<TComponent>& getOrCreateStorage()
@@ -41,7 +46,7 @@ private:
 			auto it = _componentStorages.find(typeIndex);
 			if (it != _componentStorages.end())
 			{
-				return *std::static_pointer_cast<StorageFor<TComponent>>(it->second);
+				return *std::static_pointer_cast<StorageFor<TComponent>>(it->second.storage);
 			}
 		}
 
@@ -49,21 +54,12 @@ private:
 		auto it = _componentStorages.find(typeIndex);
 		if (it != _componentStorages.end())
 		{
-			return *std::static_pointer_cast<StorageFor<TComponent>>(it->second);
+			return *std::static_pointer_cast<StorageFor<TComponent>>(it->second.storage);
 		}
 
 		auto storage = std::make_shared<StorageFor<TComponent>>();
-		auto storageIt = _componentStorages.emplace(typeIndex, storage).first;
-		try
-		{
-			_removeCallbacks.emplace(typeIndex, [this](Entity entity)
-			                         { getOrCreateStorage<TComponent>().removeComponent(entity); });
-		}
-		catch (...)
-		{
-			_componentStorages.erase(storageIt);
-			throw;
-		}
+		_componentStorages.emplace(typeIndex, StorageEntry{storage, [storage](Entity entity)
+		                                                  { storage->removeComponent(entity); }});
 		return *storage;
 	}
 
@@ -88,7 +84,7 @@ public:
 			std::shared_lock lock(_registryMutex);
 			auto it = _componentStorages.find(std::type_index(typeid(TComponent)));
 			if (it == _componentStorages.end()) return false;
-			storage = static_cast<StorageFor<TComponent>*>(it->second.get());
+			storage = static_cast<StorageFor<TComponent>*>(it->second.storage.get());
 		}
 		return storage->hasComponent(entity);
 	}
@@ -116,10 +112,10 @@ public:
 		std::vector<std::function<void(Entity)>> callbacks;
 		{
 			std::shared_lock lock(_registryMutex);
-			callbacks.reserve(_removeCallbacks.size());
-			for (const auto& [type, callback] : _removeCallbacks)
+			callbacks.reserve(_componentStorages.size());
+			for (const auto& [type, entry] : _componentStorages)
 			{
-				callbacks.push_back(callback);
+				callbacks.push_back(entry.remove);
 			}
 		}
 		for (auto& callback : callbacks)
