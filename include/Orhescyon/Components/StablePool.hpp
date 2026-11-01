@@ -3,6 +3,7 @@
 #include <atomic>
 #include <bit>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -110,7 +111,7 @@ class StablePool
 		const uint32_t blockIndex = index >> BLOCK_SHIFT;
 		const uint32_t tableIndex = std::bit_width(blockIndex);
 		BlockTable* table = _blocks[tableIndex].load(std::memory_order_acquire);
-		return table ? table->blocks[blockIndex - tableStart(tableIndex)].load(std::memory_order_acquire) : nullptr;
+		return table->blocks[blockIndex - tableStart(tableIndex)].load(std::memory_order_acquire);
 	}
 
 	Block* ensureCapacity(uint32_t index)
@@ -159,6 +160,10 @@ public:
 	{
 		// Note: We don't track which slots are alive, so we don't call destructors.
 		// The owning storage destroys live non-trivial objects before the pool dies.
+		// TODO: Maybe need to call desctructors cuz stable pool is for large data;
+
+		
+		// Is text up is even true now? Wtf
 		for (auto& table : _blocks)
 		{
 			delete table.load(std::memory_order_relaxed);
@@ -196,7 +201,8 @@ public:
 			{
 				if (index == INVALID_INDEX) [[unlikely]]
 				{
-					throw std::length_error("StablePool capacity exceeded");
+					std::cerr << "StablePool capacity exceeded" << std::endl;
+					std::abort();
 				}
 				block = ensureCapacity(index);
 				if (_capacity.compare_exchange_weak(index, index + 1,
@@ -231,12 +237,6 @@ public:
 	// the caller destroys non-trivial objects before deallocating.
 	void deallocate(uint32_t index)
 	{
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (index >= _capacity.load(std::memory_order_acquire)) [[unlikely]]
-		{
-			return;
-		}
-#endif
 		_liveCount.fetch_sub(1, std::memory_order_relaxed);
 		releaseIndex(index);
 	}
@@ -244,48 +244,18 @@ public:
 	T& operator[](uint32_t index) noexcept
 	{
 		Block* block = findBlock(index);
-#if defined(ORHESCYON_HIGH_CHECK)
-		const uint32_t capacity = _capacity.load(std::memory_order_acquire);
-		if (index >= capacity || !block) [[unlikely]]
-		{
-			std::cerr << "ERROR::STABLE_POOL::operator[] index " << index << " out of bounds (capacity: " << capacity << ")" << std::endl;
-			if (capacity > 0)
-			{
-				return findBlock(0)->at(0);
-			}
-			std::terminate();
-		}
-#endif
 		return block->at(index & BLOCK_MASK);
 	}
 
 	const T& operator[](uint32_t index) const noexcept
 	{
 		const Block* block = findBlock(index);
-#if defined(ORHESCYON_HIGH_CHECK)
-		const uint32_t capacity = _capacity.load(std::memory_order_acquire);
-		if (index >= capacity || !block) [[unlikely]]
-		{
-			std::cerr << "ERROR::STABLE_POOL::operator[] const index " << index << " out of bounds (capacity: " << capacity << ")" << std::endl;
-			if (capacity > 0)
-			{
-				return findBlock(0)->at(0);
-			}
-			std::terminate();
-		}
-#endif
 		return block->at(index & BLOCK_MASK);
 	}
 
 	T* at(uint32_t index) noexcept
 	{
 		Block* block = findBlock(index);
-#if defined(ORHESCYON_HIGH_CHECK)
-		if (index >= _capacity.load(std::memory_order_acquire) || !block) [[unlikely]]
-		{
-			return nullptr;
-		}
-#endif
 		return block->ptr(index & BLOCK_MASK);
 	}
 
@@ -298,7 +268,8 @@ public:
 		const uint32_t lastTable = std::bit_width(numBlocks - 1);
 		if (lastTable >= _blocks.size()) [[unlikely]]
 		{
-			throw std::length_error("StablePool block count exceeds index range");
+			std::cerr << "StablePool block count exceeds index range" << std::endl;
+			std::abort();
 		}
 		for (uint32_t i = 0; i <= lastTable; ++i)
 		{

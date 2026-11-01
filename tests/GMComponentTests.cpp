@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/GeneralManager.hpp>
 #include <Orhescyon/Systems/SystemCore.hpp>
 
@@ -26,6 +25,12 @@ namespace
 struct Position { float x, y; };
 struct Health { int value; };
 
+struct SparseHealth
+{
+    static constexpr auto orhescyonStoragePolicy = StoragePolicy::Sparse;
+    int value;
+};
+
 TEST(GeneralManager, AddAndGetComponent)
 {
     GeneralManager gm;
@@ -44,6 +49,53 @@ TEST(GeneralManager, GetMissingComponentReturnsNull)
     Entity e = gm.createEntity();
 
     EXPECT_EQ(gm.getComponent<Position>(e), nullptr);
+}
+
+TEST(GeneralManager, MissingSparseComponentsAreRejectedBeforeStorageAccess)
+{
+    GeneralManager gm(nullptr);
+    std::vector<Entity> entities;
+    entities.reserve(2050);
+    for (size_t i = 0; i < 2050; ++i) entities.push_back(gm.createEntity());
+
+    EXPECT_EQ(gm.getComponent<SparseHealth>(entities[0]), nullptr);
+    EXPECT_NO_THROW(gm.removeComponentImmediate<SparseHealth>(entities[0]));
+
+    for (size_t i = 0; i < 1000; ++i)
+        gm.addComponentImmediate<SparseHealth>(entities[i], static_cast<int>(i));
+
+    for (Entity missing : {entities[1001], entities[2049]})
+    {
+        EXPECT_EQ(gm.getComponent<SparseHealth>(missing), nullptr);
+        EXPECT_NO_THROW(gm.removeComponentImmediate<SparseHealth>(missing));
+    }
+
+    EXPECT_EQ(gm.storageStatistics<SparseHealth>().liveComponentCount, 1000u);
+    const SparseHealth* existing = gm.getComponent<SparseHealth>(entities[999]);
+    ASSERT_NE(existing, nullptr);
+    EXPECT_EQ(existing->value, 999);
+}
+
+TEST(GeneralManager, RemovedSparseComponentStaysAbsentAfterPoolSlotReuse)
+{
+    GeneralManager gm(nullptr);
+    const Entity first = gm.createEntity();
+    const Entity second = gm.createEntity();
+    SparseHealth* previous = gm.addComponentImmediate<SparseHealth>(first, 7);
+    ASSERT_NE(previous, nullptr);
+
+    gm.removeComponentImmediate<SparseHealth>(first);
+    EXPECT_EQ(gm.getComponent<SparseHealth>(first), nullptr);
+
+    SparseHealth* current = gm.addComponentImmediate<SparseHealth>(second, 42);
+    ASSERT_NE(current, nullptr);
+    EXPECT_EQ(current, previous);
+    EXPECT_EQ(gm.getComponent<SparseHealth>(first), nullptr);
+    EXPECT_EQ(gm.getComponent<SparseHealth>(second), current);
+    EXPECT_EQ(current->value, 42);
+    EXPECT_NO_THROW(gm.removeComponentImmediate<SparseHealth>(first));
+    EXPECT_EQ(gm.storageStatistics<SparseHealth>().liveComponentCount, 1u);
+    EXPECT_EQ(gm.getComponent<SparseHealth>(second), current);
 }
 
 TEST(GeneralManager, AddComponentToInactiveReturnsNull)

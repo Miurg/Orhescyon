@@ -2,6 +2,7 @@
 
 #include "DeferredChangeQueue.hpp"
 #include "../GeneralManager.hpp"
+#include <cstdlib>
 
 namespace Orhescyon
 {
@@ -25,20 +26,20 @@ inline void DeferredChangeQueue::flushDeferred(GeneralManager& gm, std::string_v
 
 inline void DeferredChangeQueue::destroyEntity(GeneralManager& gm, Entity entity, std::string_view smName)
 {
-#if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
 	{
 		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::DestroyEntity: SystemManager \"" << smName
 		          << "\" not found. Command ignored." << std::endl;
+		std::abort();
+	}
+	if (!gm.isActive(entity))
+	{
+		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::DestroyEntity on inactive entity " << entity << std::endl;
 		return;
 	}
-#endif
 	std::scoped_lock lock(_mutex);
 	deferredQueue(smName).push_back(DeferredCommand{DeferredOpKind::DestroyEntity, [entity](GeneralManager& gm)
-	                                                {
-		                                                if (!gm.isActive(entity)) return;
-		                                                gm.destroyEntityImmediate(entity);
-	                                                }});
+	                                                { gm.destroyEntityImmediate(entity); }});
 }
 
 template <typename TComponent, typename... Args>
@@ -46,23 +47,28 @@ void DeferredChangeQueue::addComponent(GeneralManager& gm, Entity entity, Args&&
 {
 	static_assert(sizeof...(Args) >= 1, "addComponent requires the SystemManager name as its last argument");
 
-	using ArgsTuple = std::tuple<std::decay_t<Args>...>;
-	ArgsTuple ownedArgs(std::forward<Args>(args)...);
-	std::string smName(std::get<sizeof...(Args) - 1>(ownedArgs));
+	auto argsRefs = std::tie(args...);
+	std::string smName(std::get<sizeof...(Args) - 1>(argsRefs));
 
-#if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
 	{
 		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::AddComponent: SystemManager \"" << smName
 		          << "\" not found. Command ignored." << std::endl;
+		std::abort();
+	}
+	if (!gm.isActive(entity))
+	{
+		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::AddComponent on inactive entity " << entity << std::endl;
 		return;
 	}
-#endif
+
+	using ArgsTuple = std::tuple<std::decay_t<Args>...>;
+	ArgsTuple ownedArgs(std::forward<Args>(args)...);
+
 	// all this shit for move-only args. same as jobpool
 	// TODO: do better
 	auto lambda = [entity, componentArgs = tupleWithoutLast(std::move(ownedArgs))](GeneralManager& gm) mutable
 	{
-		if (!gm.isActive(entity)) return;
 		std::apply([entity, &gm](auto&&... unpacked)
 		           { gm.addComponentImmediate<TComponent>(entity, std::move(unpacked)...); }, std::move(componentArgs));
 	};
@@ -75,58 +81,58 @@ void DeferredChangeQueue::addComponent(GeneralManager& gm, Entity entity, Args&&
 template <typename TComponent>
 void DeferredChangeQueue::removeComponent(GeneralManager& gm, Entity entity, std::string_view smName)
 {
-#if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
 	{
 		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::RemoveComponent: SystemManager \"" << smName
 		          << "\" not found. Command ignored." << std::endl;
+		std::abort();
+	}
+	if (!gm.isActive(entity))
+	{
+		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::RemoveComponent on inactive entity " << entity << std::endl;
 		return;
 	}
-#endif
 	std::scoped_lock lock(_mutex);
 	deferredQueue(smName).push_back(DeferredCommand{DeferredOpKind::RemoveComponent, [entity](GeneralManager& gm)
-	                                                {
-		                                                if (!gm.isActive(entity)) return;
-		                                                gm.removeComponentImmediate<TComponent>(entity);
-	                                                }});
+	                                                { gm.removeComponentImmediate<TComponent>(entity); }});
 }
 
 template <typename TSystem>
 void DeferredChangeQueue::subscribeEntity(GeneralManager& gm, Entity entity, std::string_view smName)
 {
-#if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
 	{
 		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::SubscribeEntity: SystemManager \"" << smName
 		          << "\" not found. Command ignored." << std::endl;
+		std::abort();
+	}
+	if (!gm.isActive(entity))
+	{
+		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::SubscribeEntity on inactive entity " << entity << std::endl;
 		return;
 	}
-#endif
 	std::scoped_lock lock(_mutex);
 	deferredQueue(smName).push_back(DeferredCommand{DeferredOpKind::SubscribeEntity, [entity](GeneralManager& gm)
-	                                                {
-		                                                if (!gm.isActive(entity)) return;
-		                                                gm.subscribeEntityImmediate<TSystem>(entity);
-	                                                }});
+	                                                { gm.subscribeEntityImmediate<TSystem>(entity); }});
 }
 
 template <typename TSystem>
 void DeferredChangeQueue::unsubscribeEntity(GeneralManager& gm, Entity entity, std::string_view smName)
 {
-#if defined(ORHESCYON_HIGH_CHECK)
 	if (!gm.hasSystemManager(smName))
 	{
 		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::UnsubscribeEntity: SystemManager \"" << smName
 		          << "\" not found. Command ignored." << std::endl;
+		std::abort();
+	}
+	if (!gm.isActive(entity))
+	{
+		std::cerr << "WARNING::DEFERRED_CHANGE_QUEUE::UnsubscribeEntity on inactive entity " << entity << std::endl;
 		return;
 	}
-#endif
 	std::scoped_lock lock(_mutex);
 	deferredQueue(smName).push_back(DeferredCommand{DeferredOpKind::UnsubscribeEntity, [entity](GeneralManager& gm)
-	                                                {
-		                                                if (!gm.isActive(entity)) return;
-		                                                gm.unsubscribeEntityImmediate<TSystem>(entity);
-	                                                }});
+	                                                { gm.unsubscribeEntityImmediate<TSystem>(entity); }});
 }
 
 } // namespace Orhescyon

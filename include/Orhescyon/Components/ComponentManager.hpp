@@ -15,7 +15,7 @@
 
 namespace Orhescyon
 {
-// Type-erased registry of component storages. 
+// Type-erased registry of component storages.
 // ComponentColumn by default,
 // SparseComponentStorage as the opt-in for big rare components.
 class ComponentManager
@@ -59,7 +59,10 @@ private:
 
 		auto storage = std::make_shared<StorageFor<TComponent>>();
 		_componentStorages.emplace(typeIndex, StorageEntry{storage, [storage](Entity entity)
-		                                                  { storage->removeComponent(entity); }});
+		                                                   {
+			                                                   if (storage->hasComponent(entity))
+				                                                   storage->removeComponent(entity);
+		                                                   }});
 		return *storage;
 	}
 

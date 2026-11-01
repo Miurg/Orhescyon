@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/GeneralManager.hpp>
 #include <Orhescyon/Systems/SystemCore.hpp>
 
@@ -12,6 +11,10 @@ TEST(StablePool, AllocateAndAccess)
 
     EXPECT_EQ(*ptr, 42);
     EXPECT_EQ(pool[idx], 42);
+    EXPECT_EQ(pool.at(idx), ptr);
+    const StablePool<int>& constPool = pool;
+    EXPECT_EQ(&constPool[idx], ptr);
+    EXPECT_EQ(constPool[idx], 42);
     EXPECT_EQ(pool.liveCount(), 1u);
 }
 
@@ -103,38 +106,16 @@ TEST(StablePool, OwnerDestructionIsNotRepeatedByDeallocationOrPoolDestruction)
     EXPECT_EQ(destructorCalls, 2);
 }
 
-TEST(StablePool, ExcessiveReservationThrowsAndLeavesThePoolUsable)
-{
-    StablePool<int, 64> pool;
-    constexpr uint32_t excessiveBlocks = (uint32_t{1} << 26) + 1;
-    EXPECT_THROW(pool.reserveBlocks(excessiveBlocks), std::length_error);
-    EXPECT_EQ(pool.capacity(), 0u);
-    EXPECT_EQ(pool.blockCount(), 0u);
-    auto [index, pointer] = pool.allocate(42);
-    ASSERT_NE(pointer, nullptr);
-    EXPECT_EQ(index, 0u);
-    EXPECT_EQ(*pointer, 42);
-    EXPECT_EQ(pool.liveCount(), 1u);
-}
-
 #if GTEST_HAS_DEATH_TEST
-TEST(StablePoolDeathTest, MutableAccessToEmptyPoolTerminatesWithDiagnostic)
+TEST(StablePoolDeathTest, ExcessiveReservationAborts)
 {
+    using Pool = StablePool<int, 64>;
     EXPECT_DEATH(
         {
-            StablePool<int> pool;
-            (void)pool[0];
+            Pool pool;
+            constexpr uint32_t excessiveBlocks = (uint32_t{1} << 26) + 1;
+            pool.reserveBlocks(excessiveBlocks);
         },
-        "out of bounds");
-}
-
-TEST(StablePoolDeathTest, ConstAccessToEmptyPoolTerminatesWithDiagnostic)
-{
-    EXPECT_DEATH(
-        {
-            const StablePool<int> pool;
-            (void)pool[0];
-        },
-        "out of bounds");
+        "StablePool block count exceeds index range");
 }
 #endif

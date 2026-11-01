@@ -28,10 +28,8 @@ public:
 		auto it = _contexts.find(typeid(TContext).hash_code());
 		if (it == _contexts.end())
 		{
-#ifdef ORHESCYON_HIGH_CHECK
 			std::cerr << "WARNING::CONTEXT_MANAGER::Context " << typeid(TContext).name()
 			          << " not registered, returning invalid entity" << std::endl;
-#endif
 			return Entity::invalid();
 		}
 		return it->second;

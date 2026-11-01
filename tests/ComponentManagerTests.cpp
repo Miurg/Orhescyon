@@ -1,4 +1,3 @@
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/Components/ComponentManager.hpp>
 #include <gtest/gtest.h>
 #include <array>
@@ -77,8 +76,8 @@ TEST(ComponentManager, RemoveEntityClearsAllItsComponents)
 	cm.removeEntity(e1);
 
 	// Entity 1 components should be gone
-	EXPECT_EQ(cm.getComponent<Position>(e1), nullptr);
-	EXPECT_EQ(cm.getComponent<Health>(e1), nullptr);
+	EXPECT_FALSE(cm.hasComponent<Position>(e1));
+	EXPECT_FALSE(cm.hasComponent<Health>(e1));
 
 	// Entity 2 components should remain untouched
 	Position* p2 = cm.getComponent<Position>(e2);
@@ -116,18 +115,17 @@ TEST(ComponentManager, PerfectForwardingArguments)
 	EXPECT_EQ(n->id, 42);
 }
 
-TEST(ComponentManager, LazyInitializationDoesNotThrow) 
+TEST(ComponentManager, LazyInitializationCreatesEmptyStorage)
 {
 	ComponentManager cm;
 	Entity e1{1, 0};
 
-	EXPECT_EQ(cm.getComponent<Position>(e1), nullptr);
-
-	EXPECT_NO_THROW(cm.removeComponent<Position>(e1));
+	EXPECT_FALSE(cm.hasComponent<Position>(e1));
 
 	// Getting the storage should return an empty storage
 	auto& positions = cm.getStorage<Position>();
 	EXPECT_EQ(positions.size(), 0u);
+	EXPECT_FALSE(positions.hasComponent(e1));
 }
 
 TEST(ComponentManager, TypeIsolation)
@@ -138,7 +136,7 @@ TEST(ComponentManager, TypeIsolation)
 	cm.addComponent<Position>(e1, Position{ 1.0f, 2.0f });
 
 	// Adding Position should not mysteriously add Health
-	EXPECT_EQ(cm.getComponent<Health>(e1), nullptr);
+	EXPECT_FALSE(cm.hasComponent<Health>(e1));
 }
 
 TEST(ComponentManager, ConcurrentLookupReturnsSameStorage)
@@ -264,6 +262,37 @@ struct Orhescyon::ComponentStorageTraits<ForeignSparseComponent>
 
 namespace
 {
+TEST(ComponentManager, RemoveEntitySkipsMissingSparseComponents)
+{
+	ComponentManager cm;
+	const Entity owner{2, 0};
+	const std::array<Entity, 2> withoutSparse{Entity{3, 0}, Entity{100'000, 0}};
+	auto& storage = cm.getStorage<RareSparseComponent>();
+
+	EXPECT_NO_THROW(cm.removeEntity(withoutSparse[0]));
+	EXPECT_EQ(storage.size(), 0u);
+
+	RareSparseComponent* component = cm.addComponent<RareSparseComponent>(owner, 42);
+	ASSERT_NE(component, nullptr);
+	for (Entity entity : withoutSparse)
+	{
+		cm.addComponent<Position>(entity, Position{1.0f, 2.0f});
+		EXPECT_NO_THROW(cm.removeEntity(entity));
+		EXPECT_FALSE(cm.hasComponent<Position>(entity));
+		EXPECT_FALSE(storage.hasComponent(entity));
+		ASSERT_TRUE(storage.hasComponent(owner));
+		EXPECT_EQ(storage.size(), 1u);
+		EXPECT_EQ(storage.getComponent(owner), component);
+		EXPECT_EQ(component->payload, 42);
+	}
+
+	cm.removeEntity(owner);
+	EXPECT_FALSE(storage.hasComponent(owner));
+	EXPECT_EQ(storage.size(), 0u);
+	EXPECT_NO_THROW(cm.removeEntity(owner));
+	EXPECT_EQ(storage.size(), 0u);
+}
+
 TEST(ComponentManager, StoragePolicyDispatch)
 {
 	static_assert(std::is_same_v<ComponentManager::StorageFor<Position>, ComponentColumn<Position, 4096>>);

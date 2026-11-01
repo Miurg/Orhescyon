@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/Components/SparseComponentStorage.hpp>
 
 using namespace Orhescyon;
@@ -38,16 +37,23 @@ TEST(SparseComponentStorage, AddAndGet)
     EXPECT_FLOAT_EQ(p->y, 2.0f);
 }
 
-TEST(SparseComponentStorage, GetNonexistentReturnsNull)
+TEST(SparseComponentStorage, GetExistingComponentsAfterGrowth)
 {
-    SparseComponentStorage<SparsePosition> storage;
-    EXPECT_EQ(storage.getComponent(Entity{999, 0}), nullptr);
+    SparseComponentStorage<SparsePosition, 64> storage;
 
-    for (uint32_t i = 0; i < 1000; i++)
+    for (uint32_t i = 0; i < 1000; ++i)
     {
-        storage.addComponent(Entity{i, 0}, SparsePosition{1.0f, 2.0f});
+        const float value = static_cast<float>(i);
+        storage.addComponent(Entity{i, 0}, SparsePosition{value, -value});
     }
-    EXPECT_EQ(storage.getComponent(Entity{1001, 0}), nullptr);
+    for (uint32_t i = 0; i < 1000; ++i)
+    {
+        const float value = static_cast<float>(i);
+        const SparsePosition* component = storage.getComponent(Entity{i, 0});
+        ASSERT_NE(component, nullptr);
+        EXPECT_FLOAT_EQ(component->x, value);
+        EXPECT_FLOAT_EQ(component->y, -value);
+    }
 }
 
 TEST(SparseComponentStorage, HasComponent)
@@ -77,15 +83,8 @@ TEST(SparseComponentStorage, RemoveComponent)
     storage.addComponent(Entity{1, 0}, SparsePosition{1.0f, 2.0f});
     storage.removeComponent(Entity{1, 0});
 
-    EXPECT_EQ(storage.getComponent(Entity{1, 0}), nullptr);
     EXPECT_FALSE(storage.hasComponent(Entity{1, 0}));
     EXPECT_EQ(storage.size(), 0u);
-}
-
-TEST(SparseComponentStorage, RemoveNonexistentIsNoop)
-{
-    SparseComponentStorage<SparsePosition> storage;
-    EXPECT_NO_THROW(storage.removeComponent(Entity{999, 0}));
 }
 
 TEST(SparseComponentStorage, DestructorCalledOnRemove)

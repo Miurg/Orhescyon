@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/Entitys/EntityManager.hpp>
 
 #include <atomic>

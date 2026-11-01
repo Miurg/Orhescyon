@@ -4,8 +4,10 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <cstdlib>
 #include <functional>
 #include <future>
+#include <iostream>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -63,7 +65,11 @@ public:
 
 	explicit JobPool(std::size_t threadCount = defaultThreadCount())
 	{
-		if (threadCount == 0) throw std::invalid_argument("JobPool: threadCount must be at least 1");
+		if (threadCount == 0)
+		{
+			std::cerr << "JobPool: threadCount must be at least 1" << std::endl;
+			std::abort();
+		}
 
 		_workers.reserve(threadCount);
 		for (std::size_t i = 0; i < threadCount; ++i) _workers.emplace_back([this] { workerLoop(); });
@@ -96,7 +102,11 @@ public:
 
 		{
 			std::lock_guard<std::mutex> lock(_mutex);
-			if (_stop) throw std::runtime_error("JobPool: submit on stopped pool");
+			if (_stop)
+			{
+				std::cerr << "JobPool: submit on stopped pool" << std::endl;
+				std::abort();
+			}
 			_tasks.emplace([task] { (*task)(); });
 		}
 		_cvar.notify_one();
@@ -116,7 +126,11 @@ public:
 
 		{
 			std::lock_guard<std::mutex> lock(_mutex);
-			if (_stop) throw std::runtime_error("JobPool: submitAsync on stopped pool");
+			if (_stop)
+			{
+				std::cerr << "JobPool: submitAsync on stopped pool" << std::endl;
+				std::abort();
+			}
 			_tasks.emplace([task] { (*task)(); });
 		}
 		_cvar.notify_one();

@@ -169,10 +169,12 @@ TEST(JobPool, SubmitFireAndForgetDestructorWaitsForRunningTasks)
 }
 
 
-TEST(JobPool, ConstructorRejectsZeroThreadCount)
+#if GTEST_HAS_DEATH_TEST
+TEST(JobPoolDeathTest, ConstructorWithZeroThreadCountAborts)
 {
-    EXPECT_THROW(JobPool{0}, std::invalid_argument);
+    EXPECT_DEATH(JobPool{0}, "JobPool: threadCount must be at least 1");
 }
+#endif
 
 TEST(JobPool, QueuedTasksGetBrokenPromiseOnPoolDestruction)
 {

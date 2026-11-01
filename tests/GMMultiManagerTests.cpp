@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/GeneralManager.hpp>
 #include <Orhescyon/Systems/SystemCore.hpp>
 
@@ -60,29 +59,34 @@ static void recordShutdown(std::string tag)
 TEST(MultiManager, DefaultSystemManagerAutoCreated)
 {
     GeneralManager gm;
-    EXPECT_NO_THROW(gm.getSystemManager("default"));
+    EXPECT_NE(gm.getSystemManager("default"), nullptr);
 }
 
 TEST(MultiManager, RegisterSystemManagerCreatesEmpty)
 {
     GeneralManager gm;
     gm.registerSystemManager("physics");
-    EXPECT_NO_THROW(gm.getSystemManager("physics"));
+    EXPECT_NE(gm.getSystemManager("physics"), nullptr);
     EXPECT_NO_THROW(gm.update("physics"));
 }
 
-TEST(MultiManager, DuplicateRegisterSystemManagerIgnored)
+#if GTEST_HAS_DEATH_TEST
+TEST(MultiManagerDeathTest, DuplicateRegisterSystemManagerAborts)
 {
-    GeneralManager gm;
-    gm.registerSystemManager("physics");
-    EXPECT_NO_THROW(gm.registerSystemManager("physics"));
-    EXPECT_NO_THROW(gm.getSystemManager("physics"));
+    EXPECT_DEATH(
+        {
+            GeneralManager gm(nullptr);
+            gm.registerSystemManager("physics");
+            gm.registerSystemManager("physics");
+        },
+        "RegisterSystemManager duplicate name .*physics");
 }
+#endif
 
-TEST(MultiManager, GetUnknownSystemManagerThrows)
+TEST(MultiManager, GetUnknownSystemManagerReturnsNull)
 {
     GeneralManager gm;
-    EXPECT_THROW(gm.getSystemManager("ghost"), std::runtime_error);
+    EXPECT_EQ(gm.getSystemManager("ghost"), nullptr);
 }
 
 static std::atomic<int> g_physSystemCalls{0};
@@ -131,25 +135,24 @@ TEST(MultiManager, SystemWithoutOverrideGoesToDefault)
     EXPECT_EQ(g_defSystemCalls.load(), 1);
 }
 
-static std::atomic<int> g_unknownRegisteredCalls{0};
-
 class UnknownManagerSystem : public SystemCore<UnknownManagerSystem>
 {
 public:
     std::string_view getSystemManagerName() const override { return "nonexistent"; }
-    void onRegistered(GeneralManager&) override { g_unknownRegisteredCalls.fetch_add(1); }
     void update(GeneralManager&) override {}
 };
 
-TEST(MultiManager, RegisterSystemIntoUnknownManagerWarnsAndSkips)
+#if GTEST_HAS_DEATH_TEST
+TEST(MultiManagerDeathTest, RegisterSystemIntoUnknownManagerAborts)
 {
-    g_unknownRegisteredCalls = 0;
-
-    GeneralManager gm;
-    // Chaining on the rejected registration must be a safe no-op
-    EXPECT_NO_THROW(gm.registerSystem<UnknownManagerSystem>().before<DefUpdate>().writes<MMPos>());
-    EXPECT_EQ(g_unknownRegisteredCalls.load(), 0);
+    EXPECT_DEATH(
+        {
+            GeneralManager gm(nullptr);
+            gm.registerSystem<UnknownManagerSystem>().before<DefUpdate>().writes<MMPos>();
+        },
+        "SystemManager .*nonexistent.*not found");
 }
+#endif
 
 class PhysCount : public SystemCore<PhysCount>
 {
@@ -192,11 +195,17 @@ TEST(MultiManager, UpdateShortcutDispatchesToDefault)
     EXPECT_EQ(g_defSystemCalls.load(), 2);
 }
 
-TEST(MultiManager, UpdateUnknownThrows)
+#if GTEST_HAS_DEATH_TEST
+TEST(MultiManagerDeathTest, UpdateUnknownAborts)
 {
-    GeneralManager gm;
-    EXPECT_THROW(gm.update("ghost"), std::runtime_error);
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.update("ghost");
+        },
+        "GENERAL_MANAGER::update: no SystemManager named .*ghost");
 }
+#endif
 
 TEST(MultiManager, UpdateEmptyManagerIsNoop)
 {
@@ -433,15 +442,20 @@ public:
     void update(GeneralManager&) override {}
 };
 
-TEST(MultiManager, CycleWithinSingleManagerStillThrows)
+#if GTEST_HAS_DEATH_TEST
+TEST(MultiManagerDeathTest, CycleWithinSingleManagerAborts)
 {
-    GeneralManager gm;
-    gm.registerSystemManager("physics");
-    gm.registerSystem<PhysCycP>().before<PhysCycQ>();
-    gm.registerSystem<PhysCycQ>().before<PhysCycP>();
-
-    EXPECT_THROW(gm.update("physics"), std::runtime_error);
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystemManager("physics");
+            gm.registerSystem<PhysCycP>().before<PhysCycQ>();
+            gm.registerSystem<PhysCycQ>().before<PhysCycP>();
+            gm.update("physics");
+        },
+        "Cycle detected in system dependency graph");
 }
+#endif
 
 class ShutdownRecorderA : public SystemCore<ShutdownRecorderA>
 {
@@ -538,9 +552,8 @@ public:
     std::string_view getSystemManagerName() const override { return "physics"; }
     void update(GeneralManager& gm) override
     {
-        SystemManager& mine = gm.getSystemManager(getSystemManagerName());
-        (void)mine;
-        g_selfLookupOk.store(true);
+        SystemManager* mine = gm.getSystemManager(getSystemManagerName());
+        g_selfLookupOk.store(mine != nullptr);
     }
 };
 

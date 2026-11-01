@@ -126,14 +126,6 @@ Rule of thumb: `Sparse` pays off only for types that are both big and rare — a
 the joins it participates in off the vectorized path. Measure instead of guessing:
 `gm.storageStatistics<T>()` reports live counts, allocated blocks and bytes per type.
 
-## Build-time checks
-
-| Define | Behavior |
-|---|---|
-| *(none)* | zero runtime validation — release trusts its inputs |
-| `ORHESCYON_LOW_CHECK` | cheap guards against misuse (stale handles, missing components) |
-| `ORHESCYON_HIGH_CHECK` | LOW + diagnostics |
-
 ## System Lifecycle
 
 ```

@@ -10,7 +10,7 @@
 #include <queue>
 #include <set>
 #include <string_view>
-
+#include <cstdlib>
 #include "ISystemCore.hpp"
 #include "SystemSchedulingMetadata.hpp"
 #include "../Deferred/DeferredChangeQueue.hpp"
@@ -49,16 +49,7 @@ private:
 				break;
 			}
 		}
-#ifdef ORHESCYON_HIGH_CHECK
-		if (!system)
-		{
-			std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity << " trying to subscribe to a non-existent system "
-			          << systemType.name() << ". Cant subscribe!" << std::endl;
-			return;
-		}
-#endif
 
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (!system->shouldProcessEntity(entity, gm))
 		{
 			std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity
@@ -66,11 +57,9 @@ private:
 			          << std::endl;
 			return;
 		}
-#endif
 
 		auto& currentSystems = EntityToSystems[entity];
 
-#ifdef ORHESCYON_HIGH_CHECK
 		if (std::ranges::find(currentSystems, systemType) != currentSystems.end())
 		{
 			std::cout << "WARNING::SYSTEM_MANAGER::Entity " << entity
@@ -78,7 +67,6 @@ private:
 			          << ". Cant subscribe!" << std::endl;
 			return;
 		}
-#endif
 
 		system->onEntitySubscribed(entity, gm);
 
@@ -150,16 +138,6 @@ public:
 				break;
 			}
 		}
-#ifdef ORHESCYON_HIGH_CHECK
-		if (!system)
-		{
-			std::cerr << "WARNING::SYSTEM_MANAGER::Entity " << entity
-			          << " trying to unsubscribe from a non-existent system " << systemType.name() << ". Cant unsubscribe!"
-			          << std::endl;
-			return;
-		}
-#endif
-
 		auto entityIt = EntityToSystems.find(entity);
 		if (entityIt == EntityToSystems.end() ||
 		    std::ranges::find(entityIt->second, systemType) == entityIt->second.end())
@@ -170,20 +148,14 @@ public:
 		system->onEntityUnsubscribed(entity, gm);
 
 		auto systemIt = SystemToEntities.find(systemType);
-		if (systemIt != SystemToEntities.end())
-		{
-			systemIt->second.clear(entity.slot);
-		}
+		systemIt->second.clear(entity.slot);
 
 		entityIt = EntityToSystems.find(entity);
-		if (entityIt != EntityToSystems.end())
+		auto& systems = entityIt->second;
+		auto subscribedSystemIt = std::ranges::find(systems, systemType);
+		if (subscribedSystemIt != systems.end())
 		{
-			auto& systems = entityIt->second;
-			auto systemIt = std::ranges::find(systems, systemType);
-			if (systemIt != systems.end())
-			{
-				systems.erase(systemIt);
-			}
+			systems.erase(subscribedSystemIt);
 		}
 	}
 
@@ -217,24 +189,19 @@ public:
 		{
 			std::type_index systemType = *it;
 
-			bool shouldRemove = true;
 			ISystemCore* matchingSystem = nullptr;
 			for (auto& system : SystemCore)
 			{
 				if (std::type_index(typeid(*system)) == systemType)
 				{
 					matchingSystem = system.get();
-					shouldRemove = !system->shouldProcessEntity(entity, gm);
 					break;
 				}
 			}
 
-			if (shouldRemove)
+			if (!matchingSystem->shouldProcessEntity(entity, gm))
 			{
-				if (matchingSystem)
-				{
-					matchingSystem->onEntityUnsubscribed(entity, gm);
-				}
+				matchingSystem->onEntityUnsubscribed(entity, gm);
 				SystemToEntities[systemType].clear(entity.slot);
 				it = entitySystems.erase(it);
 			}
@@ -268,18 +235,17 @@ public:
 		std::unordered_map<std::type_index, size_t> typeToIndex;
 		for (size_t i = 0; i < systemsSize; ++i) typeToIndex[std::type_index(typeid(*SystemCore[i]))] = i;
 
-#ifdef ORHESCYON_HIGH_CHECK
 		for (const auto& [systemType, systemIndex] : typeToIndex)
 		{
 			const SystemSchedulingMetadata& metadata = schedulingMetadataOf(systemType);
 			if (SystemCore[systemIndex]->requiredComponentCount() > 0 && metadata.readComponents.empty() &&
 			    metadata.writeComponents.empty())
 			{
-				std::cerr << "WARNING::SYSTEM_MANAGER::System " << systemType.name()
+				std::cerr << "ERROR::SYSTEM_MANAGER::System " << systemType.name()
 				          << " requires components but registered no reads/writes" << std::endl;
+				std::abort();
 			}
 		}
-#endif
 
 		for (size_t first = 0; first < systemsSize; ++first)
 		{
@@ -319,38 +285,42 @@ public:
 					if (secondBeforeFirst) break;
 				}
 
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 				if (firstBeforeSecond && secondBeforeFirst)
 				{
-					std::cerr << "WARNING::SYSTEM_MANAGER::Circular data dependency between "
+					std::cerr << "ERROR::SYSTEM_MANAGER::Circular data dependency between "
 					          << typeid(*SystemCore[first]).name() << " and " << typeid(*SystemCore[second]).name()
 					          << std::endl;
 				}
-#endif
+
 				if (firstBeforeSecond) addEdge(first, second);
 				if (secondBeforeFirst) addEdge(second, first);
 			}
 
-			// Explicit dependencies; unknown targets are ignored
+			// Explicit dependencies; unknown targets are calling abort
 			for (const auto& before : metadataFirst.beforeSystems)
 			{
 				auto it = typeToIndex.find(before);
-				if (it != typeToIndex.end()) addEdge(first, it->second);
-#ifdef ORHESCYON_HIGH_CHECK
+				if (it != typeToIndex.end())
+					addEdge(first, it->second);
 				else
-					std::cerr << "WARNING::SYSTEM_MANAGER::before() target " << before.name()
+				{
+					std::cerr << "ERROR::SYSTEM_MANAGER::before() target " << before.name()
 					          << " is not registered in this manager" << std::endl;
-#endif
+					std::abort();
+				}
+					
 			}
 			for (const auto& after : metadataFirst.afterSystems)
 			{
 				auto it = typeToIndex.find(after);
 				if (it != typeToIndex.end()) addEdge(it->second, first);
-#ifdef ORHESCYON_HIGH_CHECK
 				else
-					std::cerr << "WARNING::SYSTEM_MANAGER::after() target " << after.name()
+				{
+					std::cerr << "ERROR::SYSTEM_MANAGER::after() target " << after.name()
 					          << " is not registered in this manager" << std::endl;
-#endif
+					std::abort();
+				}
+					
 			}
 		}
 
@@ -425,13 +395,12 @@ public:
 			}
 		}
 
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
 		if (processed != systemsSize)
 		{
-			throw std::runtime_error("SYSTEM_MANAGER: Cycle detected in system dependency graph! " +
-			                         std::to_string(systemsSize - processed) + " system(s) involved.");
+			std::cerr << "ERROR::SYSTEM_MANAGER: Cycle detected in system dependency graph! " <<
+			                         std::to_string(systemsSize - processed) << " system(s) involved.";
+			std::abort();
 		}
-#endif
 
 		_executionOrderDirty = false;
 	}

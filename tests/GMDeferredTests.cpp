@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/GeneralManager.hpp>
 #include <Orhescyon/Systems/SystemCore.hpp>
 
@@ -256,41 +255,72 @@ TEST(GeneralManagerDeferred, SubscribeByEntityAppliesAtUpdateEnd)
     EXPECT_TRUE(gm.isSubscribedTo<MovementSystem>(entity));
 }
 
-TEST(GeneralManagerDeferred, UnknownSystemManagerDropsEntityCommands)
+#if GTEST_HAS_DEATH_TEST
+TEST(GeneralManagerDeferredDeathTest, DestroyEntityWithUnknownSystemManagerAborts)
 {
-    GeneralManager gm;
-    gm.registerSystemManager("game");
-    gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
-
-    Entity destroyTarget = gm.createEntity();
-    Entity addTarget = gm.createEntity();
-    Entity removeTarget = gm.createEntity();
-    gm.addComponentImmediate<Ammo>(removeTarget, 3);
-
-    Entity subscribeTarget = gm.createEntity();
-    gm.addComponentImmediate<Position>(subscribeTarget, 0.f, 0.f);
-    gm.addComponentImmediate<Velocity>(subscribeTarget, 0.f, 0.f);
-
-    Entity unsubscribeTarget = gm.createEntity();
-    gm.addComponentImmediate<Position>(unsubscribeTarget, 0.f, 0.f);
-    gm.addComponentImmediate<Velocity>(unsubscribeTarget, 0.f, 0.f);
-    gm.subscribeEntityImmediate<MovementSystem>(unsubscribeTarget);
-
-    gm.destroyEntityDeferred(destroyTarget, "missing");
-    gm.addComponentDeferred<Ammo>(addTarget, 9, "missing");
-    gm.removeComponentDeferred<Ammo>(removeTarget, "missing");
-    gm.subscribeEntityDeferred<MovementSystem>(subscribeTarget, "missing");
-    gm.unsubscribeEntityDeferred<MovementSystem>(unsubscribeTarget, "missing");
-
-    gm.registerSystemManager("missing");
-    gm.update("missing");
-
-    EXPECT_TRUE(gm.isActive(destroyTarget));
-    EXPECT_FALSE(gm.hasComponent<Ammo>(addTarget));
-    EXPECT_TRUE(gm.hasComponent<Ammo>(removeTarget));
-    EXPECT_FALSE(gm.isSubscribedTo<MovementSystem>(subscribeTarget));
-    EXPECT_TRUE(gm.isSubscribedTo<MovementSystem>(unsubscribeTarget));
+    EXPECT_DEATH(
+        {
+            GeneralManager gm(nullptr);
+            Entity entity = gm.createEntity();
+            gm.destroyEntityDeferred(entity, "missing");
+        },
+        "DEFERRED_CHANGE_QUEUE::DestroyEntity: SystemManager .*missing.*not found");
 }
+
+TEST(GeneralManagerDeferredDeathTest, AddComponentWithUnknownSystemManagerAborts)
+{
+    EXPECT_DEATH(
+        {
+            GeneralManager gm(nullptr);
+            Entity entity = gm.createEntity();
+            gm.addComponentDeferred<Ammo>(entity, 9, "missing");
+        },
+        "DEFERRED_CHANGE_QUEUE::AddComponent: SystemManager .*missing.*not found");
+}
+
+TEST(GeneralManagerDeferredDeathTest, RemoveComponentWithUnknownSystemManagerAborts)
+{
+    EXPECT_DEATH(
+        {
+            GeneralManager gm(nullptr);
+            Entity entity = gm.createEntity();
+            gm.addComponentImmediate<Ammo>(entity, 3);
+            gm.removeComponentDeferred<Ammo>(entity, "missing");
+        },
+        "DEFERRED_CHANGE_QUEUE::RemoveComponent: SystemManager .*missing.*not found");
+}
+
+TEST(GeneralManagerDeferredDeathTest, SubscribeEntityWithUnknownSystemManagerAborts)
+{
+    EXPECT_DEATH(
+        {
+            GeneralManager gm(nullptr);
+            gm.registerSystemManager("game");
+            gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
+            Entity entity = gm.createEntity();
+            gm.addComponentImmediate<Position>(entity, 0.f, 0.f);
+            gm.addComponentImmediate<Velocity>(entity, 0.f, 0.f);
+            gm.subscribeEntityDeferred<MovementSystem>(entity, "missing");
+        },
+        "DEFERRED_CHANGE_QUEUE::SubscribeEntity: SystemManager .*missing.*not found");
+}
+
+TEST(GeneralManagerDeferredDeathTest, UnsubscribeEntityWithUnknownSystemManagerAborts)
+{
+    EXPECT_DEATH(
+        {
+            GeneralManager gm(nullptr);
+            gm.registerSystemManager("game");
+            gm.registerSystem<MovementSystem>().writes<Position>().reads<Velocity>();
+            Entity entity = gm.createEntity();
+            gm.addComponentImmediate<Position>(entity, 0.f, 0.f);
+            gm.addComponentImmediate<Velocity>(entity, 0.f, 0.f);
+            gm.subscribeEntityImmediate<MovementSystem>(entity);
+            gm.unsubscribeEntityDeferred<MovementSystem>(entity, "missing");
+        },
+        "DEFERRED_CHANGE_QUEUE::UnsubscribeEntity: SystemManager .*missing.*not found");
+}
+#endif
 
 TEST(GeneralManagerDeferred, StaleEntityCommandsAreSkippedAndQueueContinues)
 {

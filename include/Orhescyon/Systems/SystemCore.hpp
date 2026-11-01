@@ -12,25 +12,6 @@ template <typename Derived, typename... RequiredComponents>
 class SystemCore : public ISystemCore
 {
 protected:
-	template <typename... Comps>
-	static bool hasAllComponents(Entity entity, GeneralManager& gm, const char* systemName)
-	{
-		return (checkComponent<Comps>(entity, gm, systemName) && ...);
-	}
-	template <typename T>
-	static bool checkComponent(Entity entity, GeneralManager& gm, const char* systemName)
-	{
-		if (gm.getComponent<T>(entity) == nullptr)
-		{
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-			std::cerr << "WARNING::SYSTEM::Entity " << entity << " should not be processed by " << systemName
-			          << " because it doesn't have required component: " << typeid(T).name() << std::endl;
-#endif
-			return false;
-		}
-		return true;
-	}
-
 	// Iterates this system's subscribers, binding RequiredComponents to func.
 	template <typename TFunc>
 	void forEachSubscribedEntity(GeneralManager& gm, TFunc&& func)
@@ -54,7 +35,7 @@ public:
 
 	bool shouldProcessEntity(Entity entity, GeneralManager& gm) override
 	{
-		return hasAllComponents<RequiredComponents...>(entity, gm, typeid(Derived).name());
+		return (gm.hasComponent<RequiredComponents>(entity) && ...);
 	}
 
 	[[nodiscard]] size_t requiredComponentCount() const override
@@ -74,13 +55,7 @@ public:
 		// TODO: create return variables
 	}
 
-	void onEntitySubscribed(Entity entity, GeneralManager& gm) override
-	{
-		if (!shouldProcessEntity(entity, gm))
-		{
-			return; // TODO: create return variables
-		}
-	}
+	void onEntitySubscribed(Entity, GeneralManager&) override {}
 
 	void onEntityUnsubscribed(Entity entity, GeneralManager& gm) override
 	{

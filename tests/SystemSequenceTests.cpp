@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#define ORHESCYON_HIGH_CHECK
 #include <Orhescyon/GeneralManager.hpp>
 #include <Orhescyon/Systems/SystemCore.hpp>
 
@@ -216,6 +215,12 @@ public:
     void update(GeneralManager&) override { record(90); }
 };
 
+class SysWithRequiredComponent : public SystemCore<SysWithRequiredComponent, CompA>
+{
+public:
+    void update(GeneralManager&) override { record(91); }
+};
+
 class SysSleepA : public SystemCore<SysSleepA>
 {
 public:
@@ -404,38 +409,93 @@ TEST(SystemSequence, MixedDependencies)
     EXPECT_LT(pos(71), pos(72)); // B before C (explicit before)
 }
 
-TEST(SystemSequence, CircularExplicitDependencyThrows)
+#if GTEST_HAS_DEATH_TEST
+TEST(SystemSequenceDeathTest, CircularExplicitDependencyAborts)
 {
-    GeneralManager gm;
-    gm.registerSystem<CycP>().before<CycQ>();
-    gm.registerSystem<CycQ>().before<CycP>();
-    EXPECT_THROW(gm.update(), std::runtime_error);
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystem<CycP>().before<CycQ>();
+            gm.registerSystem<CycQ>().before<CycP>();
+            gm.update();
+        },
+        "Cycle detected in system dependency graph");
 }
 
-TEST(SystemSequence, CircularDataDependencyThrows)
+TEST(SystemSequenceDeathTest, CircularDataDependencyAborts)
 {
-    GeneralManager gm;
-    gm.registerSystem<CycDataA>().writes<CompA>().reads<CompB>();
-    gm.registerSystem<CycDataB>().writes<CompB>().reads<CompA>();
-    EXPECT_THROW(gm.update(), std::runtime_error);
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystem<CycDataA>().writes<CompA>().reads<CompB>();
+            gm.registerSystem<CycDataB>().writes<CompB>().reads<CompA>();
+            gm.update();
+        },
+        "Cycle detected in system dependency graph");
 }
 
-TEST(SystemSequence, CircularThreeSystemsThrows)
+TEST(SystemSequenceDeathTest, CircularThreeSystemsAborts)
 {
-    GeneralManager gm;
-    gm.registerSystem<CycThreeA>().before<CycThreeB>();
-    gm.registerSystem<CycThreeB>().before<CycThreeC>();
-    gm.registerSystem<CycThreeC>().before<CycThreeA>();
-    EXPECT_THROW(gm.update(), std::runtime_error);
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystem<CycThreeA>().before<CycThreeB>();
+            gm.registerSystem<CycThreeB>().before<CycThreeC>();
+            gm.registerSystem<CycThreeC>().before<CycThreeA>();
+            gm.update();
+        },
+        "Cycle detected in system dependency graph");
+}
+TEST(SystemSequenceDeathTest, BeforeNonExistentSystemAborts)
+{
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystem<SysBeforeGhost>().before<SysNeverRegistered>();
+            gm.update();
+        },
+        "before.*target.*not registered in this manager");
 }
 
-TEST(SystemSequence, BeforeNonExistentSystemNoThrow)
+TEST(SystemSequenceDeathTest, AfterNonExistentSystemAborts)
+{
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystem<SysBeforeGhost>().after<SysNeverRegistered>();
+            gm.update();
+        },
+        "after.*target.*not registered in this manager");
+}
+
+TEST(SystemSequenceDeathTest, MissingAccessDeclarationsAbort)
+{
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystem<SysWithRequiredComponent>();
+            gm.update();
+        },
+        "requires components but registered no reads/writes");
+}
+#endif
+
+TEST(SystemSequence, RequiredComponentSystemAcceptsReadsOnly)
 {
     resetLog();
     GeneralManager gm;
-    gm.registerSystem<SysBeforeGhost>().before<SysNeverRegistered>();
+    gm.registerSystem<SysWithRequiredComponent>().reads<CompA>();
     EXPECT_NO_THROW(gm.update());
-    EXPECT_NE(pos(90), -1);
+    EXPECT_NE(pos(91), -1);
+}
+
+TEST(SystemSequence, RequiredComponentSystemAcceptsWritesOnly)
+{
+    resetLog();
+    GeneralManager gm;
+    gm.registerSystem<SysWithRequiredComponent>().writes<CompA>();
+    EXPECT_NO_THROW(gm.update());
+    EXPECT_NE(pos(91), -1);
 }
 
 TEST(SystemSequence, IndependentSystemsAllExecute)
@@ -824,13 +884,19 @@ public:
     void update(GeneralManager&) override {}
 };
 
-TEST(SystemSequence, CycleViaExplicitBetweenWriteWriteSystemsThrows)
+#if GTEST_HAS_DEATH_TEST
+TEST(SystemSequenceDeathTest, CycleViaExplicitBetweenWriteWriteSystemsAborts)
 {
-    GeneralManager gm;
-    gm.registerSystem<WWCycleA>().writes<CompA>().before<WWCycleB>();
-    gm.registerSystem<WWCycleB>().writes<CompA>().before<WWCycleA>();
-    EXPECT_THROW(gm.update(), std::runtime_error);
+    EXPECT_DEATH(
+        {
+            GeneralManager gm;
+            gm.registerSystem<WWCycleA>().writes<CompA>().before<WWCycleB>();
+            gm.registerSystem<WWCycleB>().writes<CompA>().before<WWCycleA>();
+            gm.update();
+        },
+        "Cycle detected in system dependency graph");
 }
+#endif
 
 // Registration-chain specifics
 class FluentDupA : public SystemCore<FluentDupA>

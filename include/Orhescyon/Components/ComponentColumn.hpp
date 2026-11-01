@@ -5,6 +5,8 @@
 #include <atomic>
 #include <bit>
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -195,22 +197,12 @@ public:
 
 	TComponent* getComponent(Entity entity) noexcept
 	{
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (!_presence.test(entity.slot)) [[unlikely]]
-		{
-			return nullptr;
-		}
-#endif
 		return componentPointerForSlot(entity.slot);
 	}
 
 	void removeComponent(Entity entity)
 	{
 		const uint32_t slot = entity.slot;
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (!_presence.test(slot)) [[unlikely]]
-			return;
-#endif
 
 		if constexpr (STORES_DATA && !std::is_trivially_destructible_v<TComponent>)
 		{
@@ -263,7 +255,8 @@ public:
 		constexpr uint64_t maxSlotCapacity = uint64_t{1} << 32;
 		if (slotCapacity > maxSlotCapacity)
 		{
-			throw std::length_error("ComponentColumn slot capacity exceeds index range");
+			std::cerr << "ComponentColumn slot capacity exceeds index range" << std::endl;
+			std::abort();
 		}
 		_presence.reserveSlots(static_cast<uint32_t>(std::min<uint64_t>(slotCapacity, maxSlotCapacity - 1)));
 		const uint32_t blocksNeeded = static_cast<uint32_t>(slotCapacity / BlockSize + (slotCapacity % BlockSize != 0));

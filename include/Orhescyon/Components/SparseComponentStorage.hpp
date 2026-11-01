@@ -118,22 +118,12 @@ public:
 
 	TComponent* getComponent(Entity entity) noexcept
 	{
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (!_presence.test(entity.slot)) [[unlikely]]
-		{
-			return nullptr;
-		}
-#endif
 		return _pool.at(sparseEntry(entity.slot).load(std::memory_order_acquire));
 	}
 
 	void removeComponent(Entity entity)
 	{
 		const uint32_t slot = entity.slot;
-#if defined(ORHESCYON_LOW_CHECK) || defined(ORHESCYON_HIGH_CHECK)
-		if (!_presence.test(slot)) [[unlikely]]
-			return;
-#endif
 
 		auto& entry = sparseEntry(slot);
 		const uint32_t poolIndex = entry.load(std::memory_order_acquire);
