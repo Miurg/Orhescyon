@@ -67,7 +67,7 @@ TEST(GeneralManager, SubscribeEntityToSystem)
     gm.addComponentImmediate<Position>(e, 0.0f, 0.0f);
     gm.addComponentImmediate<Velocity>(e, 1.0f, 1.0f);
 
-    EXPECT_NO_THROW(gm.subscribeEntityImmediate<MovementSystem>(e));
+    gm.subscribeEntityImmediate<MovementSystem>(e);
 }
 
 TEST(GeneralManager, SubscribeWithoutRequiredComponentFails)
@@ -77,7 +77,7 @@ TEST(GeneralManager, SubscribeWithoutRequiredComponentFails)
 
     Entity e = gm.createEntity();
 
-    EXPECT_NO_THROW(gm.subscribeEntityImmediate<MovementSystem>(e));
+    gm.subscribeEntityImmediate<MovementSystem>(e);
 }
 
 TEST(GeneralManager, UnsubscribeEntity)
@@ -89,7 +89,7 @@ TEST(GeneralManager, UnsubscribeEntity)
     gm.addComponentImmediate<Health>(e, 50);
     gm.subscribeEntityImmediate<HealthSystem>(e);
 
-    EXPECT_NO_THROW(gm.unsubscribeEntityImmediate<HealthSystem>(e));
+    gm.unsubscribeEntityImmediate<HealthSystem>(e);
 }
 
 TEST(GeneralManager, DestroyEntityUnsubscribesFromSystems)
@@ -101,7 +101,7 @@ TEST(GeneralManager, DestroyEntityUnsubscribesFromSystems)
     gm.addComponentImmediate<Health>(e, 50);
     gm.subscribeEntityImmediate<HealthSystem>(e);
 
-    EXPECT_NO_THROW(gm.destroyEntityImmediate(e));
+    gm.destroyEntityImmediate(e);
 }
 
 TEST(GeneralManager, RemoveRequiredComponentAutoUnsubscribes)
@@ -114,7 +114,7 @@ TEST(GeneralManager, RemoveRequiredComponentAutoUnsubscribes)
     gm.addComponentImmediate<Velocity>(e, 1.0f, 0.0f);
     gm.subscribeEntityImmediate<MovementSystem>(e);
 
-    EXPECT_NO_THROW(gm.removeComponentImmediate<Position>(e));
+    gm.removeComponentImmediate<Position>(e);
 }
 
 TEST(GeneralManager, IsSubscribedToReturnsFalseBeforeSubscribe)

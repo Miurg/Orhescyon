@@ -485,7 +485,7 @@ TEST(SystemSequence, RequiredComponentSystemAcceptsReadsOnly)
     resetLog();
     GeneralManager gm;
     gm.registerSystem<SysWithRequiredComponent>().reads<CompA>();
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
     EXPECT_NE(pos(91), -1);
 }
 
@@ -494,7 +494,7 @@ TEST(SystemSequence, RequiredComponentSystemAcceptsWritesOnly)
     resetLog();
     GeneralManager gm;
     gm.registerSystem<SysWithRequiredComponent>().writes<CompA>();
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
     EXPECT_NE(pos(91), -1);
 }
 
@@ -567,7 +567,7 @@ TEST(SystemSequence, SingleSystemRunsOnCallerThread)
 TEST(SystemSequence, NoSystemsUpdateSafe)
 {
     GeneralManager gm;
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
 }
 
 TEST(SystemSequence, SingleSystemRuns)
@@ -677,7 +677,7 @@ TEST(SystemSequence, WriteWriteWithBarrierRegisteredBeforeAfter)
     gm.registerSystem<WWBarrier>();
     gm.registerSystem<WWBeforeBarrier>().writes<CompA>().before<WWBarrier>();
     gm.registerSystem<WWAfterBarrier>().writes<CompA>().after<WWBarrier>();
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
 
     ASSERT_NE(pos(200), -1);
     ASSERT_NE(pos(201), -1);
@@ -693,7 +693,7 @@ TEST(SystemSequence, WriteWriteWithBarrierRegisteredAfterBefore)
     gm.registerSystem<WWBarrier>();
     gm.registerSystem<WWAfterBarrier>().writes<CompA>().after<WWBarrier>();
     gm.registerSystem<WWBeforeBarrier>().writes<CompA>().before<WWBarrier>();
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
 
     ASSERT_NE(pos(200), -1);
     ASSERT_NE(pos(201), -1);
@@ -861,7 +861,7 @@ TEST(SystemSequence, WriteWriteSplitInMultipleLayersIndependently)
     gm.registerSystem<WWStackL1B>().writes<CompA>();
     gm.registerSystem<WWStackL2C>().reads<CompA>().writes<CompB>();
     gm.registerSystem<WWStackL2D>().reads<CompA>().writes<CompB>();
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
 
     ASSERT_NE(pos(240), -1);
     ASSERT_NE(pos(241), -1);
@@ -916,7 +916,7 @@ TEST(SystemSequence, DuplicateDeclarationsAreHarmless)
     GeneralManager gm;
     gm.registerSystem<FluentDupA>().writes<CompA>().writes<CompA>().before<FluentDupB>().before<FluentDupB>();
     gm.registerSystem<FluentDupB>().writes<CompA>();
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
 
     ASSERT_NE(pos(250), -1);
     ASSERT_NE(pos(251), -1);
@@ -942,7 +942,7 @@ TEST(SystemSequence, RepeatedRegistrationMergesMetadata)
     gm.registerSystem<FluentMergeSys>().writes<CompA>();
     gm.registerSystem<FluentMergeSys>();
     gm.registerSystem<FluentMergeReader>().reads<CompA>();
-    EXPECT_NO_THROW(gm.update());
+    gm.update();
 
     ASSERT_NE(pos(261), -1);
     EXPECT_LT(pos(260), pos(261));

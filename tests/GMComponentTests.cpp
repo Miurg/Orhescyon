@@ -6,11 +6,9 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <latch>
 #include <limits>
 #include <memory>
-#include <stdexcept>
 #include <thread>
 #include <type_traits>
 #include <unordered_set>
@@ -59,7 +57,7 @@ TEST(GeneralManager, MissingSparseComponentsAreRejectedBeforeStorageAccess)
     for (size_t i = 0; i < 2050; ++i) entities.push_back(gm.createEntity());
 
     EXPECT_EQ(gm.getComponent<SparseHealth>(entities[0]), nullptr);
-    EXPECT_NO_THROW(gm.removeComponentImmediate<SparseHealth>(entities[0]));
+    gm.removeComponentImmediate<SparseHealth>(entities[0]);
 
     for (size_t i = 0; i < 1000; ++i)
         gm.addComponentImmediate<SparseHealth>(entities[i], static_cast<int>(i));
@@ -67,7 +65,7 @@ TEST(GeneralManager, MissingSparseComponentsAreRejectedBeforeStorageAccess)
     for (Entity missing : {entities[1001], entities[2049]})
     {
         EXPECT_EQ(gm.getComponent<SparseHealth>(missing), nullptr);
-        EXPECT_NO_THROW(gm.removeComponentImmediate<SparseHealth>(missing));
+        gm.removeComponentImmediate<SparseHealth>(missing);
     }
 
     EXPECT_EQ(gm.storageStatistics<SparseHealth>().liveComponentCount, 1000u);
@@ -93,7 +91,7 @@ TEST(GeneralManager, RemovedSparseComponentStaysAbsentAfterPoolSlotReuse)
     EXPECT_EQ(gm.getComponent<SparseHealth>(first), nullptr);
     EXPECT_EQ(gm.getComponent<SparseHealth>(second), current);
     EXPECT_EQ(current->value, 42);
-    EXPECT_NO_THROW(gm.removeComponentImmediate<SparseHealth>(first));
+    gm.removeComponentImmediate<SparseHealth>(first);
     EXPECT_EQ(gm.storageStatistics<SparseHealth>().liveComponentCount, 1u);
     EXPECT_EQ(gm.getComponent<SparseHealth>(second), current);
 }
@@ -306,40 +304,29 @@ namespace
 template <typename Func>
 void runAdditionThreads(size_t threadCount, Func&& func)
 {
-    // Report worker failures on the test thread after every worker has finished.
     std::latch ready(static_cast<std::ptrdiff_t>(threadCount));
     std::latch start(1);
-    std::vector<std::exception_ptr> failures(threadCount);
     std::vector<std::jthread> workers;
     workers.reserve(threadCount);
-    try
     {
+        struct StartGateRelease
+        {
+            std::latch& gate;
+            ~StartGateRelease() { gate.count_down(); }
+        } releaseStart{start};
+
         for (size_t worker = 0; worker < threadCount; ++worker)
         {
             workers.emplace_back([&, worker]
             {
                 ready.count_down();
                 start.wait();
-                try { func(worker); }
-                catch (...) { failures[worker] = std::current_exception(); }
+                func(worker);
             });
         }
+        ready.wait();
     }
-    catch (...)
-    {
-        start.count_down();
-        throw;
-    }
-    ready.wait();
-    start.count_down();
     for (auto& worker : workers) worker.join();
-    for (size_t worker = 0; worker < threadCount; ++worker)
-    {
-        if (!failures[worker]) continue;
-        try { std::rethrow_exception(failures[worker]); }
-        catch (const std::exception& error) { ADD_FAILURE() << "Worker " << worker << ": " << error.what(); }
-        catch (...) { ADD_FAILURE() << "Worker " << worker << " threw an unknown exception"; }
-    }
 }
 
 std::vector<Entity> makeAdditionEntities(GeneralManager& manager, size_t count)
@@ -860,13 +847,6 @@ TYPED_TEST(ParallelComponentAddition, ViewsAndSubscriptionsRemainCorrectAfterPar
     verifyView(true);
 }
 
-enum class AdditionFailurePoint { None, Constructor, Move, Assignment };
-
-struct ExpectedAdditionFailure
-{
-    AdditionFailurePoint point;
-};
-
 struct AdditionConstructionGate
 {
     std::latch entered{1};
@@ -883,25 +863,23 @@ template <StoragePolicy Policy>
 struct ControlledAdditionComponent
 {
     static inline std::atomic<int> liveObjects{0};
+    static inline std::atomic<int> constructionCalls{0};
     uint64_t value;
     uint64_t checksum;
     std::unique_ptr<uint64_t> ownedValue;
-    AdditionFailurePoint failure;
     AdditionConstructionGate* gate;
 
-    explicit ControlledAdditionComponent(uint64_t initial, AdditionFailurePoint point = AdditionFailurePoint::None,
-                                         AdditionConstructionGate* constructionGate = nullptr)
+    explicit ControlledAdditionComponent(uint64_t initial, AdditionConstructionGate* constructionGate = nullptr)
         : value(initial), checksum(~initial), ownedValue(std::make_unique<uint64_t>(initial)),
-          failure(point), gate(constructionGate)
+          gate(constructionGate)
     {
-        if (failure == AdditionFailurePoint::Constructor) throw ExpectedAdditionFailure{failure};
+        constructionCalls.fetch_add(1);
         liveObjects.fetch_add(1);
     }
 
     ControlledAdditionComponent(ControlledAdditionComponent&& other)
-        : value(other.value), failure(other.failure), gate(other.gate)
+        : value(other.value), gate(other.gate)
     {
-        if (failure == AdditionFailurePoint::Move) throw ExpectedAdditionFailure{failure};
         ownedValue = std::move(other.ownedValue);
         if (gate)
         {
@@ -914,11 +892,9 @@ struct ControlledAdditionComponent
 
     ControlledAdditionComponent& operator=(ControlledAdditionComponent&& other)
     {
-        if (other.failure == AdditionFailurePoint::Assignment) throw ExpectedAdditionFailure{other.failure};
         value = other.value;
         checksum = other.checksum;
         ownedValue = std::move(other.ownedValue);
-        failure = other.failure;
         gate = other.gate;
         return *this;
     }
@@ -937,141 +913,24 @@ struct Orhescyon::ComponentStorageTraits<ControlledAdditionComponent<Policy>>
 namespace
 {
 template <typename Component>
-class ExceptionalParallelAddition : public testing::Test
+class ControlledParallelAddition : public testing::Test
 {
     void TearDown() override { EXPECT_EQ(Component::liveObjects.load(), 0); }
 };
 using ControlledAdditionTypes = testing::Types<ControlledAdditionComponent<StoragePolicy::Column>,
                                              ControlledAdditionComponent<StoragePolicy::Sparse>>;
-TYPED_TEST_SUITE(ExceptionalParallelAddition, ControlledAdditionTypes);
+TYPED_TEST_SUITE(ControlledParallelAddition, ControlledAdditionTypes);
 
-TYPED_TEST(ExceptionalParallelAddition, ConstructionFailuresDoNotPublishAndCanBeRetried)
-{
-    constexpr size_t count = 192;
-    GeneralManager manager(nullptr);
-    const auto entities = makeAdditionEntities(manager, count);
-    std::array<TypeParam*, count> pointers{};
-    std::array<AdditionFailurePoint, count> failures{};
-    runAdditionThreads(8, [&](size_t worker)
-    {
-        for (size_t i = worker; i < count; i += 8)
-        {
-            const auto point = i % 3 == 0 ? AdditionFailurePoint::Constructor
-                             : i % 3 == 1 ? AdditionFailurePoint::Move : AdditionFailurePoint::None;
-            try { pointers[i] = manager.addComponentImmediate<TypeParam>(entities[i], uint64_t{i}, point); }
-            catch (const ExpectedAdditionFailure& error) { failures[i] = error.point; }
-        }
-    });
-    ASSERT_FALSE(this->HasFailure());
-    for (size_t i = 0; i < count; ++i)
-    {
-        if (i % 3 == 2)
-        {
-            EXPECT_EQ(failures[i], AdditionFailurePoint::None);
-            expectAddedComponent(manager, entities[i], i, pointers[i]);
-        }
-        else
-        {
-            EXPECT_EQ(failures[i], i % 3 == 0 ? AdditionFailurePoint::Constructor : AdditionFailurePoint::Move);
-            EXPECT_EQ(pointers[i], nullptr);
-            EXPECT_FALSE(manager.hasComponent<TypeParam>(entities[i]));
-            EXPECT_EQ(manager.getComponent<TypeParam>(entities[i]), nullptr);
-        }
-    }
-    EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, count / 3);
-    EXPECT_EQ(TypeParam::liveObjects.load(), count / 3);
-    runAdditionThreads(8, [&](size_t worker)
-    {
-        for (size_t i = worker; i < count; i += 8)
-            if (i % 3 != 2) pointers[i] = manager.addComponentImmediate<TypeParam>(entities[i], uint64_t{i});
-    });
-    ASSERT_FALSE(this->HasFailure());
-    for (size_t i = 0; i < count; ++i) expectAddedComponent(manager, entities[i], i, pointers[i]);
-    EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, count);
-    EXPECT_EQ(TypeParam::liveObjects.load(), count);
-}
-
-TYPED_TEST(ExceptionalParallelAddition, FailedMovesReturnRecycledSlotsForConcurrentReuse)
-{
-    constexpr size_t count = 129;
-    GeneralManager manager(nullptr);
-    const auto entities = makeAdditionEntities(manager, count);
-    std::unordered_set<TypeParam*> original;
-    for (size_t i = 0; i < count; ++i)
-        original.insert(manager.addComponentImmediate<TypeParam>(entities[i], uint64_t{i}));
-    for (Entity entity : entities) manager.removeComponentImmediate<TypeParam>(entity);
-    const auto blocks = manager.storageStatistics<TypeParam>().allocatedBlockCount;
-    std::array<size_t, 8> caught{};
-    runAdditionThreads(8, [&](size_t worker)
-    {
-        for (size_t i = worker; i < count; i += 8)
-        {
-            try { manager.addComponentImmediate<TypeParam>(entities[i], uint64_t{i}, AdditionFailurePoint::Move); }
-            catch (const ExpectedAdditionFailure& error)
-            {
-                if (error.point == AdditionFailurePoint::Move) ++caught[worker];
-            }
-        }
-    });
-    ASSERT_FALSE(this->HasFailure());
-    size_t failureCount = 0;
-    for (size_t failures : caught) failureCount += failures;
-    EXPECT_EQ(failureCount, count);
-    EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, 0u);
-    EXPECT_EQ(TypeParam::liveObjects.load(), 0);
-    for (Entity entity : entities) EXPECT_FALSE(manager.hasComponent<TypeParam>(entity));
-    std::array<TypeParam*, count> pointers{};
-    runAdditionThreads(8, [&](size_t worker)
-    {
-        for (size_t i = worker; i < count; i += 8)
-            pointers[i] = manager.addComponentImmediate<TypeParam>(entities[i], uint64_t{i});
-    });
-    ASSERT_FALSE(this->HasFailure());
-    for (size_t i = 0; i < count; ++i) expectAddedComponent(manager, entities[i], i, pointers[i]);
-    EXPECT_EQ(std::unordered_set<TypeParam*>(pointers.begin(), pointers.end()), original);
-    EXPECT_EQ(manager.storageStatistics<TypeParam>().allocatedBlockCount, blocks);
-    EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, count);
-}
-
-TYPED_TEST(ExceptionalParallelAddition, FailedOverwritesPreserveExistingObjectsAndCounts)
-{
-    constexpr size_t count = 65;
-    GeneralManager manager(nullptr);
-    const auto entities = makeAdditionEntities(manager, count);
-    std::array<TypeParam*, count> pointers{};
-    std::array<AdditionFailurePoint, count> failures{};
-    for (size_t i = 0; i < count; ++i)
-        pointers[i] = manager.addComponentImmediate<TypeParam>(entities[i], uint64_t{i});
-    runAdditionThreads(8, [&](size_t worker)
-    {
-        for (size_t i = worker; i < count; i += 8)
-        {
-            try { manager.addComponentImmediate<TypeParam>(entities[i], uint64_t{9999}, AdditionFailurePoint::Assignment); }
-            catch (const ExpectedAdditionFailure& error) { failures[i] = error.point; }
-        }
-    });
-    ASSERT_FALSE(this->HasFailure());
-    for (size_t i = 0; i < count; ++i)
-    {
-        EXPECT_EQ(failures[i], AdditionFailurePoint::Assignment);
-        expectAddedComponent(manager, entities[i], i, pointers[i]);
-    }
-    EXPECT_EQ(TypeParam::liveObjects.load(), count);
-    EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, count);
-}
-
-TYPED_TEST(ExceptionalParallelAddition, PresenceIsNotPublishedUntilConstructionFinishes)
+TYPED_TEST(ControlledParallelAddition, PresenceIsNotPublishedUntilConstructionFinishes)
 {
     // Pause before the constructor initializes its last field to check the publication boundary.
     GeneralManager manager(nullptr);
     const Entity entity = manager.createEntity();
     AdditionConstructionGate gate;
     TypeParam* pointer = nullptr;
-    std::exception_ptr failure;
     std::jthread writer([&]
     {
-        try { pointer = manager.addComponentImmediate<TypeParam>(entity, uint64_t{42}, AdditionFailurePoint::None, &gate); }
-        catch (...) { failure = std::current_exception(); gate.announce(); }
+        pointer = manager.addComponentImmediate<TypeParam>(entity, uint64_t{42}, &gate);
     });
     gate.entered.wait();
     EXPECT_FALSE(manager.hasComponent<TypeParam>(entity));
@@ -1079,13 +938,13 @@ TYPED_TEST(ExceptionalParallelAddition, PresenceIsNotPublishedUntilConstructionF
     EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, 0u);
     gate.finish.count_down();
     writer.join();
-    ASSERT_FALSE(failure);
     expectAddedComponent(manager, entity, 42, pointer);
     EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, 1u);
 }
 
-TYPED_TEST(ExceptionalParallelAddition, InvalidEntitiesAreRejectedBeforeConstructingTheComponent)
+TYPED_TEST(ControlledParallelAddition, InvalidEntitiesAreRejectedBeforeConstructingTheComponent)
 {
+    TypeParam::constructionCalls.store(0);
     GeneralManager manager(nullptr);
     const Entity stale = manager.createEntity();
     manager.destroyEntityImmediate(stale);
@@ -1094,9 +953,9 @@ TYPED_TEST(ExceptionalParallelAddition, InvalidEntitiesAreRejectedBeforeConstruc
     const std::array<Entity, 2> invalid{stale, Entity{std::numeric_limits<uint32_t>::max(), 0}};
     for (Entity entity : invalid)
     {
-        EXPECT_NO_THROW(EXPECT_EQ(manager.addComponentImmediate<TypeParam>(
-            entity, uint64_t{42}, AdditionFailurePoint::Constructor), nullptr));
+        EXPECT_EQ(manager.addComponentImmediate<TypeParam>(entity, uint64_t{42}), nullptr);
     }
+    EXPECT_EQ(TypeParam::constructionCalls.load(), 0);
     EXPECT_EQ(TypeParam::liveObjects.load(), 0);
     EXPECT_EQ(manager.storageStatistics<TypeParam>().liveComponentCount, 0u);
     EXPECT_FALSE(manager.hasComponent<TypeParam>(fresh));

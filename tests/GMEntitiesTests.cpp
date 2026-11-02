@@ -38,7 +38,7 @@ TEST(GeneralManager, DestroyInactiveEntityIsSafe)
     Entity e = gm.createEntity();
     gm.destroyEntityImmediate(e);
 
-    EXPECT_NO_THROW(gm.destroyEntityImmediate(e));
+    gm.destroyEntityImmediate(e);
 }
 
 TEST(GeneralManager, DestroyedSlotIsRecycledWithNewGeneration)

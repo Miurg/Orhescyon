@@ -269,7 +269,7 @@ TEST(ComponentManager, RemoveEntitySkipsMissingSparseComponents)
 	const std::array<Entity, 2> withoutSparse{Entity{3, 0}, Entity{100'000, 0}};
 	auto& storage = cm.getStorage<RareSparseComponent>();
 
-	EXPECT_NO_THROW(cm.removeEntity(withoutSparse[0]));
+	cm.removeEntity(withoutSparse[0]);
 	EXPECT_EQ(storage.size(), 0u);
 
 	RareSparseComponent* component = cm.addComponent<RareSparseComponent>(owner, 42);
@@ -277,7 +277,7 @@ TEST(ComponentManager, RemoveEntitySkipsMissingSparseComponents)
 	for (Entity entity : withoutSparse)
 	{
 		cm.addComponent<Position>(entity, Position{1.0f, 2.0f});
-		EXPECT_NO_THROW(cm.removeEntity(entity));
+		cm.removeEntity(entity);
 		EXPECT_FALSE(cm.hasComponent<Position>(entity));
 		EXPECT_FALSE(storage.hasComponent(entity));
 		ASSERT_TRUE(storage.hasComponent(owner));
@@ -289,7 +289,7 @@ TEST(ComponentManager, RemoveEntitySkipsMissingSparseComponents)
 	cm.removeEntity(owner);
 	EXPECT_FALSE(storage.hasComponent(owner));
 	EXPECT_EQ(storage.size(), 0u);
-	EXPECT_NO_THROW(cm.removeEntity(owner));
+	cm.removeEntity(owner);
 	EXPECT_EQ(storage.size(), 0u);
 }
 

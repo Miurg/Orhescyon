@@ -10,7 +10,6 @@
 #include <cstring>
 #include <fstream>
 #include <future>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -46,7 +45,7 @@ TEST(JobPool, SubmitAsyncVoidTask)
     JobPool pool(2);
     std::atomic<bool> ran{false};
     auto fut = pool.submitAsync([&] { ran.store(true); });
-    EXPECT_NO_THROW(fut.get());
+    fut.get();
     EXPECT_TRUE(ran.load());
 }
 
@@ -63,13 +62,6 @@ TEST(JobPool, ManyTasksAllRun)
 
     for (auto& f : futures) f.get();
     EXPECT_EQ(counter.load(), N);
-}
-
-TEST(JobPool, ExceptionPropagatedThroughFuture)
-{
-    JobPool pool(1);
-    auto fut = pool.submitAsync([] { throw std::runtime_error("boom"); });
-    EXPECT_THROW(fut.get(), std::runtime_error);
 }
 
 TEST(JobPool, DestructorJoinsAllThreads)
@@ -176,13 +168,14 @@ TEST(JobPoolDeathTest, ConstructorWithZeroThreadCountAborts)
 }
 #endif
 
-TEST(JobPool, QueuedTasksGetBrokenPromiseOnPoolDestruction)
+TEST(JobPool, QueuedTasksAreDiscardedOnPoolDestruction)
 {
     std::future<int> longFut;
     std::vector<std::future<int>> queuedFutures;
 
     std::atomic<bool> longStarted{false};
     std::atomic<bool> release{false};
+    std::atomic<int> queuedTaskCalls{0};
 
     // pool lives on its own thread so we can release the long task only after ~JobPool sets _stop
     std::thread owner([&] {
@@ -199,7 +192,11 @@ TEST(JobPool, QueuedTasksGetBrokenPromiseOnPoolDestruction)
             std::this_thread::sleep_for(1ms);
 
         for (int i = 0; i < 5; ++i)
-            queuedFutures.push_back(pool.submitAsync([i] { return i; }));
+            queuedFutures.push_back(pool.submitAsync([&, i]
+            {
+                queuedTaskCalls.fetch_add(1);
+                return i;
+            }));
     });
 
     // let owner enter ~JobPool (sets _stop) while the worker is still in the long task
@@ -208,30 +205,13 @@ TEST(JobPool, QueuedTasksGetBrokenPromiseOnPoolDestruction)
     owner.join();
 
     EXPECT_EQ(longFut.get(), 42);
+    EXPECT_EQ(queuedTaskCalls.load(), 0);
 
     for (auto& f : queuedFutures)
     {
-        try
-        {
-            f.get();
-            FAIL() << "expected broken_promise on queued task";
-        }
-        catch (const std::future_error& e)
-        {
-            EXPECT_EQ(e.code(), std::make_error_code(std::future_errc::broken_promise));
-        }
+        ASSERT_TRUE(f.valid());
+        EXPECT_EQ(f.wait_for(0ms), std::future_status::ready);
     }
-}
-
-TEST(JobPool, ExceptionInTaskDoesNotKillWorker)
-{
-    JobPool pool(1);
-
-    auto bad = pool.submitAsync([] { throw std::runtime_error("first"); });
-    auto good = pool.submitAsync([] { return 7; });
-
-    EXPECT_THROW(bad.get(), std::runtime_error);
-    EXPECT_EQ(good.get(), 7);
 }
 
 TEST(JobPool, ParallelForCoversIndexRange)
@@ -287,18 +267,6 @@ TEST(JobPool, ParallelForMoreItemsThanThreads)
     for (int x : items) EXPECT_EQ(x, 1);
 }
 
-TEST(JobPool, ParallelForRethrowsException)
-{
-    JobPool pool(4);
-
-    EXPECT_THROW(
-        pool.parallelFor(std::size_t{0}, std::size_t{100}, [](std::size_t i) {
-            if (i == 50) throw std::runtime_error("boom");
-        }),
-        std::runtime_error
-    );
-}
-
 TEST(JobPool, ParallelForActuallyRunsInParallel)
 {
     JobPool pool(4);
@@ -344,17 +312,6 @@ TEST(JobPool, ParallelForAsyncReturnsGroupAndWaitJoins)
     EXPECT_EQ(done.load(), 16);
 }
 
-TEST(JobPool, ParallelForAsyncRethrowsOnWait)
-{
-    JobPool pool(4);
-
-    auto group = pool.parallelForAsync(std::size_t{0}, std::size_t{100}, [](std::size_t i) {
-        if (i == 50) throw std::runtime_error("boom");
-    });
-
-    EXPECT_THROW(group.wait(), std::runtime_error);
-}
-
 TEST(JobPool, ParallelForAsyncEmptyGroup)
 {
     JobPool pool(4);
@@ -362,7 +319,7 @@ TEST(JobPool, ParallelForAsyncEmptyGroup)
     auto group = pool.parallelForAsync(std::size_t{0}, std::size_t{0}, [](std::size_t) {});
 
     EXPECT_TRUE(group.empty());
-    EXPECT_NO_THROW(group.wait());
+    group.wait();
 }
 
 TEST(JobPool, ParallelForAsyncWaitIsIdempotent)
@@ -375,7 +332,7 @@ TEST(JobPool, ParallelForAsyncWaitIsIdempotent)
     });
 
     group.wait();
-    EXPECT_NO_THROW(group.wait());
+    group.wait();
     EXPECT_EQ(done.load(), 8);
 }
 

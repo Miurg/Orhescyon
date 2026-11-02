@@ -67,7 +67,7 @@ TEST(MultiManager, RegisterSystemManagerCreatesEmpty)
     GeneralManager gm;
     gm.registerSystemManager("physics");
     EXPECT_NE(gm.getSystemManager("physics"), nullptr);
-    EXPECT_NO_THROW(gm.update("physics"));
+    gm.update("physics");
 }
 
 #if GTEST_HAS_DEATH_TEST
@@ -211,7 +211,7 @@ TEST(MultiManager, UpdateEmptyManagerIsNoop)
 {
     GeneralManager gm;
     gm.registerSystemManager("empty");
-    EXPECT_NO_THROW(gm.update("empty"));
+    gm.update("empty");
 }
 
 static std::atomic<int> g_physSubscribed{0};
@@ -281,7 +281,7 @@ TEST(MultiManager, SubscribeBeforeRegisterWarnsNoCrash)
     gm.addComponentImmediate<MMPos>(e);
     gm.addComponentImmediate<MMVel>(e);
 
-    EXPECT_NO_THROW(gm.subscribeEntityImmediate<PhysMove>(e));
+    gm.subscribeEntityImmediate<PhysMove>(e);
 }
 
 TEST(MultiManager, DestroyEntityUnsubscribesFromAllManagers)
@@ -319,7 +319,7 @@ TEST(MultiManager, DestroyEntityNotSubscribedAnywhereIsSafe)
     gm.registerSystem<DefHealth>().writes<MMHealth>();
 
     Entity e = gm.createEntity();
-    EXPECT_NO_THROW(gm.destroyEntityImmediate(e));
+    gm.destroyEntityImmediate(e);
 }
 
 TEST(MultiManager, RemoveComponentAutoUnsubscribesCorrectManager)
@@ -345,7 +345,7 @@ TEST(MultiManager, RemoveComponentAutoUnsubscribesCorrectManager)
 
     EXPECT_EQ(g_physUnsubscribed.load(), 1);
     gm.addComponentImmediate<MMPos>(e);
-    EXPECT_NO_THROW(gm.subscribeEntityImmediate<PhysMove>(e));
+    gm.subscribeEntityImmediate<PhysMove>(e);
     EXPECT_EQ(g_physSubscribed.load(), 2);
 
     EXPECT_EQ(g_defUnsubscribed.load(), 0);
@@ -390,8 +390,8 @@ TEST(MultiManager, ManagerDagsAreIndependent)
     gm.registerSystem<RendDagA>().reads<MMCompA>();
     gm.registerSystem<RendDagB>().writes<MMCompA>();
 
-    EXPECT_NO_THROW(gm.update("physics"));
-    EXPECT_NO_THROW(gm.update("render"));
+    gm.update("physics");
+    gm.update("render");
 }
 
 class PhysSleepA : public SystemCore<PhysSleepA>

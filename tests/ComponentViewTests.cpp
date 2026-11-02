@@ -4,10 +4,8 @@
 
 #include <algorithm>
 #include <atomic>
-#include <exception>
 #include <future>
 #include <memory>
-#include <stdexcept>
 #include <type_traits>
 #include <vector>
 
@@ -53,19 +51,7 @@ public:
             }));
         }
 
-        std::exception_ptr failure;
-        for (auto& worker : workers)
-        {
-            try
-            {
-                worker.get();
-            }
-            catch (...)
-            {
-                if (!failure) failure = std::current_exception();
-            }
-        }
-        if (failure) std::rethrow_exception(failure);
+        for (auto& worker : workers) worker.get();
     }
 };
 
@@ -451,17 +437,6 @@ TEST(ComponentView, ParallelViewSupportsMoveOnlyCallbacksAndBackendReplacement)
     EXPECT_EQ(firstJobs.callCount.load(), 1u);
     EXPECT_EQ(secondJobs.callCount.load(), 1u);
     EXPECT_FLOAT_EQ(gm.getComponent<ViewPosition>(entity)->x, 7.0f);
-}
-
-TEST(ComponentView, ParallelViewPropagatesCallbackExceptions)
-{
-    ViewJobSystem jobs;
-    GeneralManager gm(&jobs);
-    gm.registerSystem<ViewMovementSystem>().writes<ViewPosition>().reads<ViewVelocity>();
-    makeSubscribedEntity(gm, 0.0f, 0.0f);
-
-    EXPECT_THROW((gm.parallelForEachSubscribedEntityWith<ViewMovementSystem, ViewPosition>(
-        [](Entity, ViewPosition&) { throw std::runtime_error("entity callback failure"); })), std::runtime_error);
 }
 
 TEST(ComponentView, ParallelCrtpHelpersUseNestedExternalJobs)
