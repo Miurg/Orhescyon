@@ -10,6 +10,17 @@ target_include_directories(Orhescyon INTERFACE
 
 target_compile_features(Orhescyon INTERFACE cxx_std_20)
 
+option(ORHESCYON_DISABLE_EXCEPTIONS "Disable C++ exceptions for Orhescyon consumers" ON)
+
+if(ORHESCYON_DISABLE_EXCEPTIONS)
+    if(MSVC)
+        target_compile_options(Orhescyon INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:/EHs-c-;/EHa->")
+        target_compile_definitions(Orhescyon INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:_HAS_EXCEPTIONS=0>")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(Orhescyon INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>")
+    endif()
+endif()
+
 if(PROJECT_IS_TOP_LEVEL)
     option(ORHESCYON_BUILD_TESTS "Build tests" ON)
 else()
