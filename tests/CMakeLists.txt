@@ -9,6 +9,19 @@ FetchContent_Declare(
 set(INSTALL_GTEST OFF)
 FetchContent_MakeAvailable(googletest)
 
+if(ORHESCYON_DISABLE_EXCEPTIONS)
+    foreach(orhescyon_test_target IN ITEMS gtest gtest_main gmock gmock_main)
+        if(TARGET ${orhescyon_test_target})
+            get_target_property(orhescyon_test_flags ${orhescyon_test_target} COMPILE_FLAGS)
+            string(REPLACE "-EHsc" "" orhescyon_test_flags "${orhescyon_test_flags}")
+            string(REPLACE "-D_HAS_EXCEPTIONS=1" "" orhescyon_test_flags "${orhescyon_test_flags}")
+            string(REPLACE "-fexceptions" "" orhescyon_test_flags "${orhescyon_test_flags}")
+            set_target_properties(${orhescyon_test_target} PROPERTIES COMPILE_FLAGS "${orhescyon_test_flags}")
+            target_link_libraries(${orhescyon_test_target} PRIVATE Orhescyon)
+        endif()
+    endforeach()
+endif()
+
 add_executable(orhescyon-tests
         GMContextTests.cpp
         StablePoolTests.cpp
