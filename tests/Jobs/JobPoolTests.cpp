@@ -9,10 +9,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <future>
+#include <latch>
+#include <memory>
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 using namespace Orhescyon;
@@ -36,16 +38,44 @@ TEST(JobPool, ExplicitSizeIsHonored)
 TEST(JobPool, SubmitAsyncReturnsTypedResult)
 {
     JobPool pool(2);
-    auto fut = pool.submitAsync([](int a, int b) { return a + b; }, 2, 3);
-    EXPECT_EQ(fut.get(), 5);
+    auto result = pool.submitAsync([](int a, int b) { return a + b; }, 2, 3);
+    result.wait();
+    result.wait();
+    EXPECT_EQ(result.status(), JobStatus::Ready);
+    EXPECT_EQ(result.get(), 5);
+    EXPECT_FALSE(result.valid());
+}
+
+TEST(JobPool, SubmitAsyncMovesResultAndHandle)
+{
+    JobPool pool(1);
+    auto result = pool.submitAsync([value = std::make_unique<int>(42)]() mutable { return std::move(value); });
+    auto moved = std::move(result);
+    EXPECT_FALSE(result.valid());
+    ASSERT_TRUE(moved.valid());
+    auto value = moved.get();
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(*value, 42);
+    EXPECT_FALSE(moved.valid());
+}
+
+TEST(JobPool, SubmitAsyncReturnsReference)
+{
+    int value = 42;
+    JobPool pool(1);
+    auto result = pool.submitAsync([&]() -> int& { return value; });
+    int& returned = result.get();
+    EXPECT_EQ(&returned, &value);
+    returned = 7;
+    EXPECT_EQ(value, 7);
 }
 
 TEST(JobPool, SubmitAsyncVoidTask)
 {
     JobPool pool(2);
     std::atomic<bool> ran{false};
-    auto fut = pool.submitAsync([&] { ran.store(true); });
-    fut.get();
+    auto result = pool.submitAsync([&] { ran.store(true); });
+    result.get();
     EXPECT_TRUE(ran.load());
 }
 
@@ -55,108 +85,93 @@ TEST(JobPool, ManyTasksAllRun)
     JobPool pool(4);
 
     std::atomic<int> counter{0};
-    std::vector<std::future<void>> futures;
-    futures.reserve(N);
+    std::vector<JobResult<void>> results;
+    results.reserve(N);
     for (int i = 0; i < N; ++i)
-        futures.push_back(pool.submitAsync([&] { counter.fetch_add(1, std::memory_order_relaxed); }));
+        results.push_back(pool.submitAsync([&] { counter.fetch_add(1, std::memory_order_relaxed); }));
 
-    for (auto& f : futures) f.get();
+    for (auto& result : results) result.get();
     EXPECT_EQ(counter.load(), N);
 }
 
 TEST(JobPool, DestructorJoinsAllThreads)
 {
-    auto run = std::async(std::launch::async, [] {
+    std::atomic<int> counter{0};
+    {
         JobPool pool(4);
-        std::atomic<int> counter{0};
-        std::vector<std::future<void>> futures;
+        std::vector<JobResult<void>> results;
         for (int i = 0; i < 16; ++i)
-            futures.push_back(pool.submitAsync([&] { counter.fetch_add(1); }));
-        for (auto& f : futures) f.get();
-        EXPECT_EQ(counter.load(), 16);
-    });
-    ASSERT_EQ(run.wait_for(2s), std::future_status::ready) << "destructor deadlocked";
-    run.get();
+            results.push_back(pool.submitAsync([&] { counter.fetch_add(1); }));
+        for (auto& result : results) result.get();
+    }
+    EXPECT_EQ(counter.load(), 16);
 }
 
 TEST(JobPool, BlockingTasksDoNotDeadlockOnDestruction)
 {
-    auto run = std::async(std::launch::async, [] {
-        std::atomic<int> started{0};
-        std::atomic<int> finished{0};
-        {
-            JobPool pool(4);
-            for (int i = 0; i < 4; ++i)
-                pool.submitAsync([&] {
-                    started.fetch_add(1);
-                    std::this_thread::sleep_for(50ms);
-                    finished.fetch_add(1);
-                });
-
-            while (started.load() < 4) std::this_thread::sleep_for(1ms);
-        }
-        EXPECT_EQ(finished.load(), 4);
-    });
-    ASSERT_EQ(run.wait_for(3s), std::future_status::ready) << "destructor deadlocked";
-    run.get();
+    std::latch started{4};
+    std::atomic<int> finished{0};
+    {
+        JobPool pool(4);
+        for (int i = 0; i < 4; ++i)
+            pool.submitAsync([&] {
+                started.count_down();
+                std::this_thread::sleep_for(50ms);
+                finished.fetch_add(1);
+            });
+        started.wait();
+    }
+    EXPECT_EQ(finished.load(), 4);
 }
 
 TEST(JobPool, SubmitFireAndForgetRunsTask)
 {
-    JobPool pool(2);
     std::atomic<bool> ran{false};
-    std::promise<void> done;
-    auto fut = done.get_future();
+    std::latch done{1};
+    JobPool pool(2);
 
     pool.submit([&ran, &done] {
         ran.store(true);
-        done.set_value();
+        done.count_down();
     });
 
-    ASSERT_EQ(fut.wait_for(1s), std::future_status::ready);
+    done.wait();
     EXPECT_TRUE(ran.load());
 }
 
 TEST(JobPool, SubmitManyFireAndForgetAllRun)
 {
     constexpr int N = 1000;
-    JobPool pool(4);
-
     std::atomic<int> counter{0};
-    std::promise<void> allDone;
-    auto fut = allDone.get_future();
+    std::latch allDone{N};
+    JobPool pool(4);
 
     for (int i = 0; i < N; ++i)
     {
         pool.submit([&counter, &allDone] {
-            if (counter.fetch_add(1, std::memory_order_acq_rel) + 1 == N)
-                allDone.set_value();
+            counter.fetch_add(1);
+            allDone.count_down();
         });
     }
 
-    ASSERT_EQ(fut.wait_for(2s), std::future_status::ready);
+    allDone.wait();
     EXPECT_EQ(counter.load(), N);
 }
 
 TEST(JobPool, SubmitFireAndForgetDestructorWaitsForRunningTasks)
 {
     std::atomic<int> finished{0};
-    auto run = std::async(std::launch::async, [&finished] {
-        std::atomic<int> started{0};
-        {
-            JobPool pool(4);
-            for (int i = 0; i < 4; ++i)
-                pool.submit([&started, &finished] {
-                    started.fetch_add(1);
-                    std::this_thread::sleep_for(50ms);
-                    finished.fetch_add(1);
-                });
-            while (started.load() < 4) std::this_thread::sleep_for(1ms);
-        }
-    });
-
-    ASSERT_EQ(run.wait_for(3s), std::future_status::ready) << "destructor deadlocked";
-    run.get();
+    std::latch started{4};
+    {
+        JobPool pool(4);
+        for (int i = 0; i < 4; ++i)
+            pool.submit([&started, &finished] {
+                started.count_down();
+                std::this_thread::sleep_for(50ms);
+                finished.fetch_add(1);
+            });
+        started.wait();
+    }
     EXPECT_EQ(finished.load(), 4);
 }
 
@@ -166,52 +181,71 @@ TEST(JobPoolDeathTest, ConstructorWithZeroThreadCountAborts)
 {
     EXPECT_DEATH(JobPool{0}, "JobPool: threadCount must be at least 1");
 }
+
+TEST(JobPoolDeathTest, GetWithoutTaskStateAborts)
+{
+    EXPECT_DEATH(
+        {
+            JobResult<int> result;
+            result.get();
+        },
+        "JobResult: no task state");
+}
 #endif
 
 TEST(JobPool, QueuedTasksAreDiscardedOnPoolDestruction)
 {
-    std::future<int> longFut;
-    std::vector<std::future<int>> queuedFutures;
+    JobResult<int> longResult;
+    std::vector<JobResult<int>> queuedResults;
+    JobGroup group;
 
-    std::atomic<bool> longStarted{false};
+    std::latch longStarted{1};
+    std::latch queued{1};
     std::atomic<bool> release{false};
     std::atomic<int> queuedTaskCalls{0};
 
-    // pool lives on its own thread so we can release the long task only after ~JobPool sets _stop
     std::thread owner([&] {
         JobPool pool(1);
 
-        longFut = pool.submitAsync([&] {
-            longStarted.store(true, std::memory_order_release);
-            while (!release.load(std::memory_order_acquire))
-                std::this_thread::sleep_for(1ms);
+        longResult = pool.submitAsync([&] {
+            longStarted.count_down();
+            release.wait(false);
             return 42;
         });
 
-        while (!longStarted.load(std::memory_order_acquire))
-            std::this_thread::sleep_for(1ms);
+        longStarted.wait();
 
         for (int i = 0; i < 5; ++i)
-            queuedFutures.push_back(pool.submitAsync([&, i]
+            queuedResults.push_back(pool.submitAsync([&, i]
             {
                 queuedTaskCalls.fetch_add(1);
                 return i;
             }));
+        group = pool.parallelForAsync(std::size_t{0}, std::size_t{4}, [&](std::size_t)
+        {
+            queuedTaskCalls.fetch_add(1);
+        });
+        queued.count_down();
     });
 
-    // let owner enter ~JobPool (sets _stop) while the worker is still in the long task
-    std::this_thread::sleep_for(50ms);
+    queued.wait();
+    for (auto& result : queuedResults) result.wait();
     release.store(true, std::memory_order_release);
+    release.notify_all();
     owner.join();
 
-    EXPECT_EQ(longFut.get(), 42);
+    EXPECT_EQ(longResult.get(), 42);
     EXPECT_EQ(queuedTaskCalls.load(), 0);
 
-    for (auto& f : queuedFutures)
+    for (auto& result : queuedResults)
     {
-        ASSERT_TRUE(f.valid());
-        EXPECT_EQ(f.wait_for(0ms), std::future_status::ready);
+        ASSERT_TRUE(result.valid());
+        EXPECT_EQ(result.status(), JobStatus::Cancelled);
     }
+#if GTEST_HAS_DEATH_TEST
+    EXPECT_DEATH(queuedResults[0].get(), "JobResult: get on cancelled task");
+    EXPECT_DEATH(group.wait(), "JobGroup: wait on cancelled tasks");
+#endif
 }
 
 TEST(JobPool, ParallelForCoversIndexRange)
@@ -308,7 +342,12 @@ TEST(JobPool, ParallelForAsyncReturnsGroupAndWaitJoins)
     });
 
     EXPECT_FALSE(group.empty());
+    EXPECT_TRUE(group.valid());
+    EXPECT_EQ(group.chunkCount(), 4u);
     group.wait();
+    EXPECT_TRUE(group.empty());
+    EXPECT_FALSE(group.valid());
+    EXPECT_EQ(group.chunkCount(), 0u);
     EXPECT_EQ(done.load(), 16);
 }
 
@@ -338,19 +377,14 @@ TEST(JobPool, ParallelForAsyncWaitIsIdempotent)
 
 TEST(JobPool, ParallelForAsyncDroppedGroupDoesNotCrash)
 {
-    auto run = std::async(std::launch::async, [] {
-        JobPool pool(4);
-        std::atomic<int> done{0};
-
-        {
-            auto group = pool.parallelForAsync(std::size_t{0}, std::size_t{16}, [&](std::size_t) {
-                done.fetch_add(1);
-            });
-        }
-    });
-
-    ASSERT_EQ(run.wait_for(2s), std::future_status::ready);
-    run.get();
+    std::latch done{16};
+    JobPool pool(4);
+    {
+        auto group = pool.parallelForAsync(std::size_t{0}, std::size_t{16}, [&](std::size_t) {
+            done.count_down();
+        });
+    }
+    done.wait();
 }
 
 // Compile-check helper: builds an EXCLUDE_FROM_ALL target via cmake; success = implementation accepts the shape.

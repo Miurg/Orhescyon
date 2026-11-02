@@ -1,21 +1,40 @@
 #pragma once
 
-#include <future>
+#include <atomic>
+#include <cstddef>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
 #include <utility>
-#include <vector>
 
 namespace Orhescyon
 {
-// Aggregate of futures from parallelForAsync.
 class JobGroup
 {
 private:
-	std::vector<std::future<void>> _futures;
+	friend class JobPool;
+
+	struct State
+	{
+		const std::size_t chunks;
+		std::atomic<std::size_t> remaining;
+		std::atomic<bool> cancelled{false};
+
+		explicit State(std::size_t count) : chunks(count), remaining(count) {}
+
+		void finish(bool wasCancelled)
+		{
+			if (wasCancelled) cancelled.store(true, std::memory_order_relaxed);
+			if (remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) remaining.notify_all();
+		}
+	};
+
+	std::shared_ptr<State> _state;
+
+	explicit JobGroup(std::size_t chunks) : _state(std::make_shared<State>(chunks)) {}
 
 public:
 	JobGroup() = default;
-
-	explicit JobGroup(std::vector<std::future<void>>&& futures) noexcept : _futures(std::move(futures)) {}
 
 	JobGroup(const JobGroup&) = delete;
 	JobGroup& operator=(const JobGroup&) = delete;
@@ -24,35 +43,33 @@ public:
 
 	[[nodiscard]] bool empty() const noexcept
 	{
-		return _futures.empty();
+		return !_state;
 	}
 
 	[[nodiscard]] std::size_t chunkCount() const noexcept
 	{
-		return _futures.size();
+		return _state ? _state->chunks : 0;
 	}
 
 	[[nodiscard]] bool valid() const noexcept
 	{
-		if (_futures.empty()) return false;
-		for (const auto& f : _futures)
-			if (!f.valid()) return false;
-		return true;
+		return static_cast<bool>(_state);
 	}
 
-	// Idempotent: clears futures on completion, second call is a no-op.
 	void wait()
 	{
-		std::vector<std::future<void>> futures;
-		futures.swap(_futures);
-		// Wait for every task before an exception from get() can unwind the caller.
-		for (auto& f : futures)
+		if (!_state) return;
+		auto state = std::move(_state);
+		auto remaining = state->remaining.load(std::memory_order_acquire);
+		while (remaining != 0)
 		{
-			if (f.valid()) f.wait();
+			state->remaining.wait(remaining, std::memory_order_acquire);
+			remaining = state->remaining.load(std::memory_order_acquire);
 		}
-		for (auto& f : futures)
+		if (state->cancelled.load(std::memory_order_relaxed))
 		{
-			if (f.valid()) f.get();
+			std::cerr << "JobGroup: wait on cancelled tasks" << std::endl;
+			std::abort();
 		}
 	}
 };

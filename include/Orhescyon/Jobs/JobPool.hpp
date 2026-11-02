@@ -1,31 +1,36 @@
 #pragma once
 
 #include <Orhescyon/Jobs/JobGroup.hpp>
+#include <Orhescyon/Jobs/JobResult.hpp>
 
 #include <algorithm>
 #include <condition_variable>
 #include <cstdlib>
 #include <functional>
-#include <future>
 #include <iostream>
 #include <iterator>
 #include <memory>
 #include <mutex>
 #include <queue>
-#include <stdexcept>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-//TODO: use std::scoped_lock
 namespace Orhescyon
 {
 class JobPool
 {
 private:
+	struct Task
+	{
+		std::function<void()> run;
+		std::function<void()> cancel;
+	};
+
 	std::vector<std::thread> _workers;
-	std::queue<std::function<void()>> _tasks;
+	std::queue<Task> _tasks;
 	std::mutex _mutex;
 	std::condition_variable _cvar;
 	bool _stop = false;
@@ -34,7 +39,7 @@ private:
 	{
 		for (;;)
 		{
-			std::function<void()> task;
+			Task task;
 
 			{
 				std::unique_lock<std::mutex> lock(_mutex);
@@ -46,8 +51,34 @@ private:
 				_tasks.pop();
 			}
 
-			task();
+			task.run();
 		}
+	}
+
+	void enqueue(Task task)
+	{
+		{
+			std::lock_guard<std::mutex> lock(_mutex);
+			if (_stop)
+			{
+				std::cerr << "JobPool: submit on stopped pool" << std::endl;
+				std::abort();
+			}
+			_tasks.push(std::move(task));
+		}
+		_cvar.notify_one();
+	}
+
+	template <typename Func>
+	void submitGroupTask(const std::shared_ptr<JobGroup::State>& state, Func&& func)
+	{
+		enqueue({
+		    [state, func = std::forward<Func>(func)]() mutable
+		    {
+			    func();
+			    state->finish(false);
+		    },
+		    [state] { state->finish(true); }});
 	}
 
 public:
@@ -77,11 +108,18 @@ public:
 
 	~JobPool()
 	{
+		std::queue<Task> cancelled;
 		{
 			std::lock_guard<std::mutex> lock(_mutex);
 			_stop = true;
+			_tasks.swap(cancelled);
 		}
 		_cvar.notify_all();
+		while (!cancelled.empty())
+		{
+			if (cancelled.front().cancel) cancelled.front().cancel();
+			cancelled.pop();
+		}
 		for (auto& t : _workers)
 			if (t.joinable()) t.join();
 	}
@@ -91,7 +129,6 @@ public:
 		return _workers.size();
 	}
 
-	// Fire-and-forget: no future. Mirrors submitAsync's binding shape, just without packaged_task.
 	template <typename Callable, typename... Args>
 	void submit(Callable&& f, Args&&... args)
 	{
@@ -100,41 +137,32 @@ public:
 
 		auto task = std::make_shared<decltype(bound)>(std::move(bound));
 
-		{
-			std::lock_guard<std::mutex> lock(_mutex);
-			if (_stop)
-			{
-				std::cerr << "JobPool: submit on stopped pool" << std::endl;
-				std::abort();
-			}
-			_tasks.emplace([task] { (*task)(); });
-		}
-		_cvar.notify_one();
+		enqueue({[task] { (*task)(); }, {}});
 	}
 
 	template <typename Callable, typename... Args>
-	auto submitAsync(Callable&& f, Args&&... args) -> std::future<std::invoke_result_t<Callable, Args...>>
+	auto submitAsync(Callable&& f, Args&&... args) -> JobResult<std::invoke_result_t<Callable, Args...>>
 	{
 		using ReturnType = std::invoke_result_t<Callable, Args...>;
 
-		// shared_ptr: packaged_task is move-only, std::function in the queue isn't
-		auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-		    [func = std::forward<Callable>(f), tup = std::make_tuple(std::forward<Args>(args)...)]() mutable -> ReturnType
-		    { return std::apply(std::move(func), std::move(tup)); });
+		auto state = std::make_shared<typename JobResult<ReturnType>::State>();
+		auto bound = [func = std::forward<Callable>(f), tup = std::make_tuple(std::forward<Args>(args)...)]() mutable -> ReturnType
+		{ return std::apply(std::move(func), std::move(tup)); };
+		auto task = std::make_shared<decltype(bound)>(std::move(bound));
 
-		std::future<ReturnType> fut = task->get_future();
-
-		{
-			std::lock_guard<std::mutex> lock(_mutex);
-			if (_stop)
-			{
-				std::cerr << "JobPool: submitAsync on stopped pool" << std::endl;
-				std::abort();
-			}
-			_tasks.emplace([task] { (*task)(); });
-		}
-		_cvar.notify_one();
-		return fut;
+		enqueue({
+		    [state, task]
+		    {
+			    if constexpr (std::is_void_v<ReturnType>)
+				    (*task)();
+			    else if constexpr (std::is_lvalue_reference_v<ReturnType>)
+				    state->value = std::addressof((*task)());
+			    else
+				    state->value.emplace((*task)());
+			    state->finish(JobStatus::Ready);
+		    },
+		    [state] { state->finish(JobStatus::Cancelled); }});
+		return JobResult<ReturnType>{std::move(state)};
 	}
 
 	// Blocking parallel for.
@@ -162,8 +190,7 @@ public:
 		std::size_t chunkSize = countIterations / threadInUse;
 		std::size_t reminders = countIterations % threadInUse;
 
-		std::vector<std::future<void>> futures;
-		futures.reserve(threadInUse);
+		JobGroup group(threadInUse);
 
 		auto localFunc = std::make_shared<std::decay_t<Func>>(std::forward<Func>(func));
 
@@ -174,15 +201,15 @@ public:
 
 			Index endIteration = beginIteration + size;
 
-			futures.emplace_back(submitAsync(
+			submitGroupTask(group._state,
 			    [localFunc, beginIteration, endIteration]
 			    {
 				    for (auto it = beginIteration; it != endIteration; ++it) (*localFunc)(it);
-			    }));
+			    });
 			beginIteration = endIteration;
 		}
 
-		return JobGroup{std::move(futures)};
+		return group;
 	}
 
 	template <typename Range, typename Func>
@@ -209,8 +236,7 @@ private:
 		std::size_t chunkSize = countIterations / threadInUse;
 		std::size_t reminders = countIterations % threadInUse;
 
-		std::vector<std::future<void>> futures;
-		futures.reserve(threadInUse);
+		JobGroup group(threadInUse);
 
 		auto localFunc = std::make_shared<std::decay_t<Func>>(std::forward<Func>(func));
 
@@ -220,15 +246,15 @@ private:
 			std::size_t size = chunkSize + (i < reminders ? 1 : 0);
 			auto endIteration = beginIteration + size;
 
-			futures.emplace_back(submitAsync(
+			submitGroupTask(group._state,
 			    [localFunc, beginIteration, endIteration]
 			    {
 				    for (auto it = beginIteration; it != endIteration; ++it) (*localFunc)(*it);
-			    }));
+			    });
 			beginIteration = endIteration;
 		}
 
-		return JobGroup{std::move(futures)};
+		return group;
 	}
 
 	// Forward / bidirectional: collect iterators once, then split by index.
@@ -246,8 +272,7 @@ private:
 		std::size_t chunkSize = total / threadInUse;
 		std::size_t reminders = total % threadInUse;
 
-		std::vector<std::future<void>> futures;
-		futures.reserve(threadInUse);
+		JobGroup group(threadInUse);
 
 		auto localFunc = std::make_shared<std::decay_t<Func>>(std::forward<Func>(func));
 
@@ -258,15 +283,15 @@ private:
 			std::size_t beginIdx = cursor;
 			std::size_t endIdx = cursor + size;
 
-			futures.emplace_back(submitAsync(
+			submitGroupTask(group._state,
 			    [localFunc, iters, beginIdx, endIdx]
 			    {
 				    for (std::size_t k = beginIdx; k < endIdx; ++k) (*localFunc)(*(*iters)[k]);
-			    }));
+			    });
 			cursor = endIdx;
 		}
 
-		return JobGroup{std::move(futures)};
+		return group;
 	}
 };
 } // namespace Orhescyon

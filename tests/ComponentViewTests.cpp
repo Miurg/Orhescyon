@@ -4,8 +4,8 @@
 
 #include <algorithm>
 #include <atomic>
-#include <future>
 #include <memory>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -42,16 +42,17 @@ public:
     {
         callCount.fetch_add(1, std::memory_order_relaxed);
         const std::size_t workerCount = std::min(count, std::size_t{4});
-        std::vector<std::future<void>> workers;
+        std::vector<std::jthread> workers;
+        workers.reserve(workerCount);
         for (std::size_t worker = 0; worker < workerCount; ++worker)
         {
-            workers.push_back(std::async(std::launch::async, [&, worker]
+            workers.emplace_back([&, worker]
             {
                 for (std::size_t index = worker; index < count; index += workerCount) body(index);
-            }));
+            });
         }
 
-        for (auto& worker : workers) worker.get();
+        for (auto& worker : workers) worker.join();
     }
 };
 
